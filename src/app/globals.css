@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: #ffffff;
+}
+
+body {
+  color: #10264a;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+  font-family: var(--font-display);
+  letter-spacing: 0;
+}
+
+p,
+span,
+button,
+a,
+input,
+select,
+textarea {
+  font-family: var(--font-body);
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+::selection {
+  background: rgba(36, 107, 255, 0.18);
+}
+
+:focus-visible {
+  outline: 2px solid #246bff;
+  outline-offset: 2px;
+}
+
+@layer components {
+  .spark-shell {
+    @apply bg-canvas text-ink;
+  }
+
+  .spark-card {
+    @apply rounded-card border border-[#BFDBFE] bg-white;
+  }
+
+  .spark-button-primary {
+    @apply inline-flex cursor-pointer items-center justify-center rounded-lg bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-600 active:scale-[0.98];
+  }
+
+  .spark-button-secondary {
+    @apply inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-600 bg-white px-5 py-3 text-sm font-semibold text-brand-700 transition-all duration-200 hover:border-brand-500 hover:bg-brand-50;
+  }
+
+  .spark-pill {
+    @apply inline-flex items-center rounded-full border border-spark-300 bg-spark-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-spark-600;
+  }
+
+  .spark-section {
+    @apply mx-auto max-w-6xl px-4 md:px-6;
+  }
+
+  .hero-art {
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 16%, black 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 16%, black 100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "21st-api-key",
+      "description": "21st.dev API key",
+      "password": true
+    }
+  ],
+  "servers": {
+    "21st": {
+      "type": "http",
+      "url": "https://21st.dev/api/mcp",
+      "headers": {
+        "x-api-key": "${input:21st-api-key}"
+      }
+    }
+  }
+}
