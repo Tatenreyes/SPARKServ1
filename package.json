@@ -12,7 +12,6 @@
     "@rive-app/react-canvas": "^4.34.2",
     "@supabase/ssr": "0.5.2",
     "@supabase/supabase-js": "2.45.4",
-    "framer-motion": "^11.11.17",
     "gsap": "^3.15.0",
     "lottie-react": "^3.1.2",
     "lucide-react": "^0.383.0",
