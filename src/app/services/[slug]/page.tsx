@@ -25,7 +25,7 @@ export default function ServiceDetailPage({ params }: { params: { slug: string }
             </span>
             <h1 className="mt-6 font-display text-4xl font-semibold md:text-5xl">{service.name} Repair Support</h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-white/75">{service.description}</p>
-            <Link href={`/customer/inquiry?appliance=${service.applianceType}`} className="spark-button-primary mt-8 h-12 bg-spark-400 text-brand-900 hover:bg-spark-300">
+            <Link href={`/customer/request-repair?appliance=${service.applianceType}`} className="spark-button-primary mt-8 h-12 bg-spark-400 text-brand-900 hover:bg-spark-300">
               Start a service inquiry <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </div>
@@ -37,7 +37,7 @@ export default function ServiceDetailPage({ params }: { params: { slug: string }
               {service.problems.map((problem) => (
                 <Link
                   key={problem.issue}
-                  href={`/customer/inquiry?appliance=${service.applianceType}&issue=${problem.issue}`}
+                  href={`/customer/request-repair?appliance=${service.applianceType}&issue=${problem.issue}`}
                   className="group flex items-center justify-between rounded-lg border border-[#BFDBFE] bg-canvas px-4 py-4 text-sm font-semibold text-ink transition hover:-translate-y-0.5 hover:border-brand-300 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400"
                 >
                   <span className="flex items-center gap-3"><CheckCircle2 className="h-4 w-4 text-brand-500" />{problem.label}</span>

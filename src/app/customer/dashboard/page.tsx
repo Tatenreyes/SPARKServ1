@@ -94,7 +94,7 @@ export default async function CustomerDashboard() {
           </p>
         </div>
         <Link
-          href="/customer/inquiry"
+          href="/customer/request-repair"
           className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 hover:shadow-md"
         >
           <Plus className="h-4 w-4" />
@@ -143,7 +143,7 @@ export default async function CustomerDashboard() {
               <p className="mt-4 text-sm font-medium text-slate-600">No active repair right now</p>
               <p className="mt-1 text-xs text-slate-400">Start a service inquiry to get matched with a technician.</p>
               <Link
-                href="/customer/inquiry"
+                href="/customer/request-repair"
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-700"
               >
                 Start Inquiry <ArrowRight className="h-3.5 w-3.5" />
@@ -210,7 +210,7 @@ export default async function CustomerDashboard() {
         <div className="space-y-6">
           <DashboardPanel title="Quick Actions">
             <div className="grid gap-3 sm:grid-cols-2">
-              <QuickAction href="/customer/inquiry" label="New Inquiry" icon={<Wrench className="h-4 w-4" />} />
+              <QuickAction href="/customer/request-repair" label="New Inquiry" icon={<Wrench className="h-4 w-4" />} />
               <QuickAction href="/customer/appliances" label="My Appliances" icon={<Plus className="h-4 w-4" />} />
               <QuickAction href="/customer/estimates" label="Estimates" icon={<ClipboardList className="h-4 w-4" />} />
               <QuickAction href="/customer/progress-tracking" label="Track Repair" icon={<TrendingUp className="h-4 w-4" />} />
@@ -258,7 +258,7 @@ export default async function CustomerDashboard() {
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <p className="text-sm text-slate-500">No service requests yet.</p>
             <Link
-              href="/customer/inquiry"
+              href="/customer/request-repair"
               className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-brand-600 hover:text-brand-700"
             >
               Start your first inquiry <ArrowRight className="h-4 w-4" />

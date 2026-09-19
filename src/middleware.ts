@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
 
   // Not logged in at all → send to login
   if (!user) {
-    const authPath = pathname.startsWith("/customer/inquiry") || pathname.startsWith("/customer/request-repair")
+    const authPath = pathname.startsWith("/customer/request-repair")
       ? "/choose"
       : "/login";
     const authUrl = new URL(authPath, request.url);

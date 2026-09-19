@@ -160,7 +160,7 @@ export default function HowItWorksPage() {
             <p className="mt-1 text-sm text-white/80">Tell us what your appliance needs.</p>
           </div>
           <Link
-            href="/customer/inquiry"
+            href="/customer/request-repair"
             className="inline-flex items-center rounded-lg bg-white px-5 py-3 text-sm font-semibold text-brand-700 transition hover:bg-brand-50"
           >
             Start a service inquiry <ArrowRight className="ml-2 h-4 w-4" />

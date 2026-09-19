@@ -7,7 +7,7 @@ interface ChooseAuthPageProps {
 }
 
 export default function ChooseAuthPage({ searchParams }: ChooseAuthPageProps) {
-  const redirectTo = searchParams.redirectTo || "/customer/inquiry";
+  const redirectTo = searchParams.redirectTo || "/customer/request-repair";
   const query = `?redirectTo=${encodeURIComponent(redirectTo)}`;
 
   return (

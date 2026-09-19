@@ -17,7 +17,7 @@ export default function ContactPage() {
         <ContactCard icon={Mail} label="Email us" value="support@sparkserv.com" href="mailto:support@sparkserv.com" />
         <ContactCard icon={MapPin} label="Service area" value="Cagayan de Oro City" />
       </section>
-      <div className="mx-auto max-w-5xl px-4 pb-16"><Link href="/customer/inquiry" className="inline-flex rounded-lg bg-[#0F52BA] px-6 py-3 text-sm font-bold text-white">Book a Service</Link></div>
+      <div className="mx-auto max-w-5xl px-4 pb-16"><Link href="/customer/request-repair" className="inline-flex rounded-lg bg-[#0F52BA] px-6 py-3 text-sm font-bold text-white">Book a Service</Link></div>
       <Footer />
     </main>
   );

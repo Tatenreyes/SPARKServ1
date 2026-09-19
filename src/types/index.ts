@@ -20,34 +20,3 @@ export interface TechnicianWithScore {
     starvationBoost: number;
   };
 }
-
-export interface ChatbotSuggestion {
-  matched: boolean;
-  applianceType: string | null;
-  issueCategory: IssueCategory | null;
-  confidence: number;
-  matchedKeywords: string[];
-  message: string;
-  tips: string[];
-  shouldEscalate: boolean;
-  safetyWarning: boolean;
-  needsClarification: boolean;
-  issueOptions?: { value: IssueCategory; label: string }[];
-}
-
-export type IssueCategory =
-  | "NOT_TURNING_ON"
-  | "NOT_COOLING"
-  | "MAKING_NOISE"
-  | "LEAKING"
-  | "NOT_DEFROSTING"
-  | "WATER_LEAKING"
-  | "WEAK_AIRFLOW"
-  | "NOT_SPINNING"
-  | "NOT_DRAINING"
-  | "NO_DISPLAY"
-  | "NO_SOUND"
-  | "SCREEN_FLICKERING"
-  | "SLOW_SPINNING"
-  | "OTHER"
-  | "SAFETY_HAZARD";

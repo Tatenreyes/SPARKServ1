@@ -85,7 +85,7 @@ export default function HomePage() {
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link
-                  href="/customer/inquiry"
+                  href="/customer/request-repair"
                   className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 px-7 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 hover:shadow-md"
                 >
                   <Search className="h-4 w-4" />
@@ -245,7 +245,7 @@ export default function HomePage() {
             <p className="mt-5 text-lg text-white/70">Join thousands of satisfied customers and experience hassle-free appliance repair today.</p>
             <div className="mt-9 flex flex-wrap justify-center gap-4">
               <Link
-                href="/customer/inquiry"
+                href="/customer/request-repair"
                 className="inline-flex h-12 items-center justify-center rounded-xl bg-white px-8 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50"
               >
                 Book a Service <ArrowRight className="ml-2 h-4 w-4" />
