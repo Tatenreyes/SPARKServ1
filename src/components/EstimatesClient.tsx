@@ -8,7 +8,7 @@ import StatusBadge from "@/components/StatusBadge";
 interface RequestInfo {
   id: string;
   appliance_type: string;
-  issue_description: string;
+  problem_description: string;
 }
 
 export default function EstimatesClient({
@@ -94,8 +94,8 @@ export default function EstimatesClient({
             <p className="mt-2 font-display text-2xl font-semibold text-ink">
               ₱{est.estimated_cost.toFixed(2)}
             </p>
-            {request?.issue_description && (
-              <p className="mt-1 text-sm text-ink/60">{request.issue_description}</p>
+            {request?.problem_description && (
+              <p className="mt-1 text-sm text-ink/60">{request.problem_description}</p>
             )}
             {est.notes && (
               <p className="mt-2 rounded-lg bg-canvas px-3 py-2 text-sm text-ink/65">{est.notes}</p>

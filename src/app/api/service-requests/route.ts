@@ -15,11 +15,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { appliance_type, issue_description, location, latitude, longitude, chatbot_resolved } = body;
+    const { appliance_id, appliance_type, issue_category, problem_description, photos, chatbot_resolved, location } = body;
 
-    if (!appliance_type || !issue_description || !location) {
+    if (!appliance_type || !problem_description) {
       return NextResponse.json(
-        { error: "appliance_type, issue_description, and location are required" },
+        { error: "appliance_type and problem_description are required" },
         { status: 400 }
       );
     }
@@ -29,12 +29,13 @@ export async function POST(request: NextRequest) {
       .from("service_requests")
       .insert({
         customer_id: user.id,
+        appliance_id: appliance_id ?? null,
         appliance_type,
-        issue_description,
-        location,
-        latitude: latitude ?? null,
-        longitude: longitude ?? null,
+        issue_category: issue_category ?? null,
+        problem_description,
+        photos: Array.isArray(photos) ? photos : [],
         chatbot_resolved: Boolean(chatbot_resolved),
+        location: location ?? null,
         status: "open",
       })
       .select()
@@ -42,9 +43,6 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    // Assignment runs with the service-role client since it needs to read
-    // across every technician's row and write offer/queue history, which
-    // normal customer RLS intentionally doesn't allow.
     const serviceRoleClient = createServiceRoleClient();
     const assigned = await assignTechnician(serviceRoleClient, created);
 

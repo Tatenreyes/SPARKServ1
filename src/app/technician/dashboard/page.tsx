@@ -60,7 +60,7 @@ export default async function TechnicianDashboard() {
   const { data: activeRequests } = activeRequestIds.length
     ? await supabase
         .from("service_requests")
-        .select("id, appliance_type, location, issue_description, status")
+        .select("id, appliance_type, location, problem_description, status")
         .in("id", activeRequestIds)
     : { data: [] };
   const activeRequestMap = new Map((activeRequests ?? []).map((r) => [r.id, r]));

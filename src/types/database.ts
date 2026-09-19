@@ -73,11 +73,12 @@ export interface TechnicianRow {
 export interface ServiceRequestRow {
   id: string;
   customer_id: string;
+  appliance_id: string | null;
   appliance_type: string;
-  issue_description: string;
-  location: string;
-  latitude: number | null;
-  longitude: number | null;
+  issue_category: string | null;
+  problem_description: string;
+  photos: string[];
+  service_type: string;
   status: RequestStatus;
   chatbot_resolved: boolean;
   assigned_technician_id: string | null;
@@ -160,11 +161,15 @@ export interface ServiceHistoryRow {
 export interface ApplianceRow {
   id: string;
   customer_id: string;
-  name: string;
   appliance_type: string;
   brand: string | null;
-  model: string | null;
+  model_number: string | null;
+  serial_number: string | null;
   purchase_date: string | null;
+  warranty_status: string;
+  warranty_type: string | null;
+  warranty_expiry_date: string | null;
+  warranty_proof_url: string | null;
   notes: string | null;
   created_at: string;
 }

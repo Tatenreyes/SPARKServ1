@@ -46,7 +46,7 @@ export default async function TechnicianBookingDetailPage({
           <h1 className="font-display text-xl font-semibold capitalize text-ink">
             {request?.appliance_type.replace("_", " ") ?? "Repair"} — {customerUser?.name ?? "Customer"}
           </h1>
-          <p className="text-sm text-ink/50">{request?.issue_description}</p>
+          <p className="text-sm text-ink/50">{request?.problem_description}</p>
           <p className="mt-1 text-xs text-ink/40">
             Scheduled: {new Date(booking.scheduled_at).toLocaleString()}
           </p>

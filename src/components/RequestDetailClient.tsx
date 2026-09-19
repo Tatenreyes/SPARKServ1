@@ -58,12 +58,14 @@ export default function RequestDetailClient({
       <div className="rounded-card border border-ink/8 p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold capitalize text-ink">
-            {request.appliance_type.replace("_", " ")} repair request
+            {request.appliance_type.replace(/_/, " ")} repair request
           </h1>
           <StatusBadge status={request.status} />
         </div>
-        <p className="mt-2 text-sm text-ink/65">{request.issue_description}</p>
-        <p className="mt-1 text-xs text-ink/35">Location: {request.location}</p>
+        {request.issue_category && (
+          <p className="mt-2 text-sm font-medium text-brand-600">{request.issue_category.replace(/_/, " ")}</p>
+        )}
+        <p className="mt-2 text-sm text-ink/65">{request.problem_description}</p>
       </div>
 
       {error && <p className="text-sm text-alert-500">{error}</p>}

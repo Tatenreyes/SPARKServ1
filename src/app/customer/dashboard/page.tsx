@@ -278,7 +278,7 @@ export default async function CustomerDashboard() {
                   </p>
                   <StatusBadge status={r.status} />
                 </div>
-                <p className="text-xs text-slate-500 line-clamp-2">{r.issue_description}</p>
+                <p className="text-xs text-slate-500 line-clamp-2">{r.problem_description}</p>
                 <p className="text-[11px] text-slate-400">{new Date(r.created_at).toLocaleDateString()}</p>
               </Link>
             ))}

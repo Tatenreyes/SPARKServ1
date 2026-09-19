@@ -8,7 +8,7 @@ export default async function MyEstimatesPage() {
 
   const { data: requests } = await supabase
     .from("service_requests")
-    .select("id, appliance_type, issue_description")
+    .select("id, appliance_type, problem_description")
     .eq("customer_id", user!.id);
 
   const requestIds = (requests ?? []).map((r) => r.id);

@@ -85,9 +85,7 @@ function JobCard({
   const [scheduledAt, setScheduledAt] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const mapsUrl = request?.location
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(request.location)}`
-    : null;
+  const mapsUrl = null;
 
   async function handleAddVisit(e: React.FormEvent) {
     e.preventDefault();
@@ -120,8 +118,7 @@ function JobCard({
           <p className="font-medium capitalize text-ink">
             {request?.appliance_type.replace("_", " ") ?? "Job"}
           </p>
-          <p className="text-sm text-ink/60">{request?.issue_description}</p>
-          <p className="mt-0.5 text-xs text-ink/40">{request?.location}</p>
+          <p className="text-sm text-ink/60">{request?.problem_description}</p>
           <p className="mt-1 text-xs text-ink/50">
             Scheduled: {new Date(booking.scheduled_at).toLocaleString()}
           </p>

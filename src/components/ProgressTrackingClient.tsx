@@ -84,8 +84,7 @@ export default function ProgressTrackingClient({
               <h2 className="mt-1 font-display text-lg font-semibold capitalize text-ink">
                 {request?.appliance_type.replace("_", " ") ?? "Repair"}
               </h2>
-              <p className="text-sm text-ink/60">{request?.issue_description}</p>
-              <p className="mt-1 text-xs text-ink/40">{request?.location}</p>
+              <p className="text-sm text-ink/60">{request?.problem_description}</p>
             </div>
             <div className="text-right">
               <p className="text-xs font-medium text-ink/40">Progress</p>

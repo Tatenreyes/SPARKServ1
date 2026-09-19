@@ -70,7 +70,7 @@ export default async function PendingAssignmentsPage() {
                   </p>
                   <StatusBadge status={r.status} />
                 </div>
-                <p className="mt-1 text-sm text-ink/65">{r.issue_description}</p>
+                <p className="mt-1 text-sm text-ink/65">{r.problem_description}</p>
                 <p className="mt-1 text-xs text-ink/35">{r.location}</p>
                 <OfferResponseControl requestId={r.id} />
               </div>
@@ -93,7 +93,7 @@ export default async function PendingAssignmentsPage() {
                   </p>
                   <StatusBadge status={r.status} />
                 </div>
-                <p className="mt-1 text-sm text-ink/65">{r.issue_description}</p>
+                <p className="mt-1 text-sm text-ink/65">{r.problem_description}</p>
                 <p className="mt-1 text-xs text-ink/35">{r.location}</p>
                 <EstimateForm serviceRequestId={r.id} />
               </div>

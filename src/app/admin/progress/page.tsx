@@ -105,7 +105,7 @@ export default async function AdminProgressManagementPage() {
                       <p className="font-medium capitalize text-ink">
                         {r?.appliance_type.replace("_", " ") ?? "Repair"}
                       </p>
-                      <p className="text-xs text-ink/40">{r?.issue_description}</p>
+                      <p className="text-xs text-ink/40">{r?.problem_description}</p>
                     </td>
                     <td className="px-4 py-3 text-ink/70">{userMap.get(b.customer_id) ?? "—"}</td>
                     <td className="px-4 py-3 text-ink/70">{userMap.get(b.technician_id) ?? "—"}</td>
