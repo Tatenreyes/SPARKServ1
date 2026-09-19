@@ -1,15 +1,35 @@
 import Sidebar, { type SidebarNavItem } from "@/components/Sidebar";
 
 const CUSTOMER_NAV: SidebarNavItem[] = [
-  { label: "Overview", href: "/customer/dashboard", icon: "gauge" },
-  { label: "Start a repair", href: "/customer/inquiry", icon: "wrench" },
-  { label: "My bookings", href: "/customer/bookings", icon: "calendar" },
-  { label: "Estimates", href: "/customer/estimates", icon: "file" },
-  { label: "Repair progress", href: "/customer/progress-tracking", icon: "clipboard" },
-  { label: "Messages", href: "/customer/messages", icon: "message" },
-  { label: "My appliances", href: "/customer/appliances", icon: "refrigerator" },
-  { label: "Support", href: "/customer/support", icon: "help" },
-  { label: "Repair history", href: "/customer/repair-history", icon: "history" },
+  { label: "Dashboard", href: "/customer/dashboard", icon: "gauge" },
+  {
+    label: "Account & Appliances",
+    icon: "refrigerator",
+    children: [
+      { label: "My Appliances", href: "/customer/appliances", icon: "refrigerator" },
+      { label: "Profile", href: "/customer/profile", icon: "profile" },
+    ],
+  },
+  {
+    label: "Service Requests",
+    icon: "wrench",
+    children: [
+      { label: "Service Inquiry", href: "/customer/request-repair", icon: "wrench" },
+      { label: "Repair Requests", href: "/customer/service-request", icon: "file" },
+      { label: "Estimates", href: "/customer/estimates", icon: "file" },
+      { label: "Bookings", href: "/customer/bookings", icon: "calendar" },
+      { label: "Repair Progress", href: "/customer/progress-tracking", icon: "clipboard" },
+      { label: "Service History", href: "/customer/repair-history", icon: "history" },
+    ],
+  },
+  {
+    label: "Support & Feedback",
+    icon: "help",
+    children: [
+      { label: "Support Tickets", href: "/customer/support", icon: "help" },
+      { label: "Messages", href: "/customer/messages", icon: "message" },
+    ],
+  },
 ];
 
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
