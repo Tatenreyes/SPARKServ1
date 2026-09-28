@@ -66,7 +66,7 @@ export default function OfferResponseControl({ requestId }: { requestId: string 
       <button
         onClick={() => setShowReasonFor(true)}
         disabled={busy}
-        className="rounded-full border border-alert-500/30 px-4 py-1.5 text-sm font-semibold text-alert-500 hover:bg-alert-50 disabled:opacity-50"
+        className="rounded-full border border-alert-500/30 px-4 py-1.5 text-sm font-semibold text-alert-ink hover:bg-alert-soft disabled:opacity-50"
       >
         Reject
       </button>

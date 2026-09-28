@@ -60,7 +60,7 @@ export default function BookingStatusControl({
       >
         {updating ? "Updating..." : NEXT_LABEL[currentStatus]}
       </button>
-      {error && <p className="mt-1 text-xs text-alert-500">{error}</p>}
+      {error && <p className="mt-1 text-xs text-alert-ink">{error}</p>}
     </div>
   );
 }

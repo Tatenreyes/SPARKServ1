@@ -65,7 +65,7 @@ export default function ProgressTrackingClient({
                 className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition ${
                   b.id === activeBooking.id
                     ? "bg-brand-500 text-white"
-                    : "bg-white text-ink/60 hover:bg-brand-50"
+                    : "bg-surface text-ink/60 hover:bg-brand-soft"
                 }`}
               >
                 {req?.appliance_type.replace("_", " ") ?? "Job"} · {bCompleted}/{bVisits.length} Visits
@@ -75,7 +75,7 @@ export default function ProgressTrackingClient({
         </div>
 
         {/* Job header */}
-        <div className="mt-4 rounded-card border border-ink/8 bg-white p-5 shadow-card">
+        <div className="mt-4 rounded-card border border-ink/8 bg-surface p-5 shadow-card">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-medium capitalize text-ink/40">
@@ -88,7 +88,7 @@ export default function ProgressTrackingClient({
             </div>
             <div className="text-right">
               <p className="text-xs font-medium text-ink/40">Progress</p>
-              <p className="font-display text-2xl font-semibold text-brand-500">
+              <p className="font-display text-2xl font-semibold text-brand-ink">
                 {completedCount}/{bookingVisits.length}
               </p>
               <p className="text-xs text-ink/40">Visits completed</p>
@@ -96,8 +96,8 @@ export default function ProgressTrackingClient({
           </div>
 
           {upcomingVisit && (
-            <div className="mt-4 rounded-lg bg-spark-50 p-4">
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-spark-700">
+            <div className="mt-4 rounded-lg bg-brand-soft p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-brand-ink">
                 <Clock className="h-3.5 w-3.5" /> Upcoming visit
               </p>
               <p className="mt-1 font-medium text-ink">{upcomingVisit.title}</p>
@@ -127,8 +127,8 @@ export default function ProgressTrackingClient({
                   key={v.id}
                   className={`rounded-card border p-4 ${
                     v.status === "completed"
-                      ? "border-signal-500/20 bg-signal-50/40"
-                      : "border-ink/8 bg-white"
+                      ? "border-signal-500/20 bg-signal-soft/40"
+                      : "border-ink/8 bg-surface"
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -187,14 +187,14 @@ export default function ProgressTrackingClient({
 
                   <div className="mt-2 flex items-center justify-between">
                     {v.signed_by ? (
-                      <p className="flex items-center gap-1 text-xs text-signal-600">
+                      <p className="flex items-center gap-1 text-xs text-signal-ink">
                         <CheckCircle2 className="h-3.5 w-3.5" /> Signed by {v.signed_by}
                       </p>
                     ) : v.status === "completed" ? (
                       <button
                         onClick={() => handleSign(v.id)}
                         disabled={signingId === v.id}
-                        className="text-xs font-semibold text-brand-500 hover:text-brand-600 disabled:opacity-50"
+                        className="text-xs font-semibold text-brand-ink hover:text-brand-ink disabled:opacity-50"
                       >
                         {signingId === v.id ? "Signing..." : "Confirm this visit"}
                       </button>
@@ -210,7 +210,7 @@ export default function ProgressTrackingClient({
       </div>
 
       {/* Important Info panel */}
-      <div className="h-fit rounded-card border border-ink/8 bg-white p-5 shadow-card">
+      <div className="h-fit rounded-card border border-ink/8 bg-surface p-5 shadow-card">
         <h3 className="font-display text-sm font-semibold text-ink">Important info</h3>
         <div className="mt-3">
           <p className="text-xs font-semibold text-ink/40">What you can do</p>

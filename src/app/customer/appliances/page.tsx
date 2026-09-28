@@ -143,9 +143,9 @@ export default function AppliancesPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-600">Account & Appliances</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-ink">Account & Appliances</p>
           <h1 className="mt-2 font-display text-3xl font-bold text-ink">My Appliances</h1>
-          <p className="mt-1.5 text-sm text-slate-500">Manage your registered appliances for faster service requests.</p>
+          <p className="mt-1.5 text-sm text-muted">Manage your registered appliances for faster service requests.</p>
         </div>
         <button
           onClick={openCreate}
@@ -157,10 +157,10 @@ export default function AppliancesPage() {
       </div>
 
       {showForm && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold text-ink">{editingId ? "Edit Appliance" : "Register Appliance"}</h2>
-            <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">
+            <button onClick={() => setShowForm(false)} className="text-muted/80 hover:text-muted">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -171,7 +171,7 @@ export default function AppliancesPage() {
                 <select
                   value={form.appliance_type}
                   onChange={(e) => setForm({ ...form, appliance_type: e.target.value })}
-                  className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                  className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                 >
                   {APPLIANCE_TYPES.map((type) => (
                     <option key={type} value={type}>{type}</option>
@@ -183,7 +183,7 @@ export default function AppliancesPage() {
                 <input
                   value={form.brand}
                   onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                  className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                  className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                   placeholder="Samsung, LG, Panasonic..."
                 />
               </div>
@@ -192,7 +192,7 @@ export default function AppliancesPage() {
                 <input
                   value={form.model_number}
                   onChange={(e) => setForm({ ...form, model_number: e.target.value })}
-                  className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                  className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                   placeholder="Model number"
                 />
               </div>
@@ -201,7 +201,7 @@ export default function AppliancesPage() {
                 <input
                   value={form.serial_number}
                   onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
-                  className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                  className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                   placeholder="Serial number"
                 />
               </div>
@@ -211,7 +211,7 @@ export default function AppliancesPage() {
                   type="date"
                   value={form.purchase_date}
                   onChange={(e) => setForm({ ...form, purchase_date: e.target.value })}
-                  className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                  className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                 />
               </div>
               <div>
@@ -219,7 +219,7 @@ export default function AppliancesPage() {
                 <select
                   value={form.warranty_status}
                   onChange={(e) => setForm({ ...form, warranty_status: e.target.value })}
-                  className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                  className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                 >
                   <option value="unknown">Not Sure</option>
                   <option value="yes">Yes</option>
@@ -233,7 +233,7 @@ export default function AppliancesPage() {
                     <select
                       value={form.warranty_type}
                       onChange={(e) => setForm({ ...form, warranty_type: e.target.value })}
-                      className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                      className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                     >
                       <option value="">Select type</option>
                       <option value="Manufacturer Warranty">Manufacturer Warranty</option>
@@ -248,7 +248,7 @@ export default function AppliancesPage() {
                       type="date"
                       value={form.warranty_expiry_date}
                       onChange={(e) => setForm({ ...form, warranty_expiry_date: e.target.value })}
-                      className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                      className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                     />
                   </div>
                 </>
@@ -260,7 +260,7 @@ export default function AppliancesPage() {
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 rows={3}
-                className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                 placeholder="Additional notes about this appliance..."
               />
             </div>
@@ -285,12 +285,12 @@ export default function AppliancesPage() {
       )}
 
       {loading ? (
-        <div className="py-12 text-center text-sm text-slate-500">Loading appliances...</div>
+        <div className="py-12 text-center text-sm text-muted">Loading appliances...</div>
       ) : appliances.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
-          <Refrigerator className="mx-auto h-12 w-12 text-slate-300" />
-          <h3 className="mt-4 text-lg font-semibold text-slate-900">No appliances registered yet</h3>
-          <p className="mt-2 text-sm text-slate-500">Add your first appliance to speed up future service requests.</p>
+        <div className="rounded-2xl border border-dashed border-ink/20 bg-soft/50 p-12 text-center">
+          <Refrigerator className="mx-auto h-12 w-12 text-muted/60" />
+          <h3 className="mt-4 text-lg font-semibold text-ink">No appliances registered yet</h3>
+          <p className="mt-2 text-sm text-muted">Add your first appliance to speed up future service requests.</p>
           <button
             onClick={openCreate}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
@@ -303,13 +303,13 @@ export default function AppliancesPage() {
           {appliances.map((appliance) => (
             <div
               key={appliance.id}
-              className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-brand-200 hover:shadow-md"
+              className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5 transition hover:border-line hover:shadow-md"
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-slate-900">{appliance.appliance_type}</span>
+                <span className="text-sm font-semibold text-ink">{appliance.appliance_type}</span>
                 <StatusBadge status={appliance.warranty_status === "yes" ? "completed" : appliance.warranty_status === "no" ? "cancelled" : "pending"} />
               </div>
-              <div className="space-y-1 text-xs text-slate-600">
+              <div className="space-y-1 text-xs text-muted">
                 {appliance.brand && <p><span className="font-medium">Brand:</span> {appliance.brand}</p>}
                 {appliance.model_number && <p><span className="font-medium">Model:</span> {appliance.model_number}</p>}
                 {appliance.serial_number && <p><span className="font-medium">Serial:</span> {appliance.serial_number}</p>}
@@ -320,7 +320,7 @@ export default function AppliancesPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => openEdit(appliance)}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-brand-200 hover:text-brand-700"
+                  className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink/80 transition hover:border-line hover:text-brand-ink"
                 >
                   <Pencil className="h-3.5 w-3.5" /> Edit
                 </button>
@@ -331,7 +331,7 @@ export default function AppliancesPage() {
                       setReloadKey((prev) => prev + 1);
                     }
                   }}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-200 hover:text-red-700"
+                  className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-alert-ink transition hover:border-line hover:text-alert-ink"
                 >
                   <Trash2 className="h-3.5 w-3.5" /> Delete
                 </button>

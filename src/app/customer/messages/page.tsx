@@ -56,9 +56,9 @@ export default async function CustomerMessagesPage() {
               <Link
                 key={b.id}
                 href={`/customer/bookings/${b.id}`}
-                className="flex items-start gap-3 rounded-card border border-ink/8 bg-white p-4 shadow-card transition hover:border-brand-300"
+                className="flex items-start gap-3 rounded-card border border-ink/8 bg-surface p-4 shadow-card transition hover:border-brand-300"
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
                   <MessageSquare className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">

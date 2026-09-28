@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getCurrentUser, AuthError } from "@/lib/auth";
 
 // POST /api/bookings — customer confirms a technician + estimate, creating a booking
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { service_request_id, estimate_id, scheduled_at, notes } = body;
+    const { service_request_id, estimate_id, scheduled_at, notes, duration_minutes } = body;
     if (!service_request_id || !estimate_id || !scheduled_at) {
       return NextResponse.json(
         { error: "service_request_id, estimate_id, and scheduled_at are required" },
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const supabase = createClient();
     const { data: serviceRequest, error: requestError } = await supabase
       .from("service_requests")
-      .select("id, customer_id, status, assigned_technician_id, assignment_status")
+      .select("id, customer_id, status, assigned_technician_id, assignment_status, requested_duration_minutes")
       .eq("id", service_request_id)
       .eq("customer_id", user.id)
       .single();
@@ -51,6 +51,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Estimate does not match an accepted technician offer" }, { status: 400 });
     }
 
+    // How long the appointment occupies the technician. Conflict checks and the
+    // daily-hours capacity limit both need it; two hours is the platform default.
+    const bookingMinutes =
+      typeof duration_minutes === "number" && duration_minutes > 0
+        ? Math.round(duration_minutes)
+        : (serviceRequest.requested_duration_minutes ?? 120);
+
+    // Refuse a slot that clashes with the technician's real schedule instead of
+    // storing a double-booking. This is the mirror image of the queue rule: a
+    // future appointment never blocks future offers, but two appointments that
+    // genuinely overlap are physically impossible.
+    const scheduledStart = new Date(scheduled_at);
+    if (Number.isNaN(scheduledStart.getTime())) {
+      return NextResponse.json({ error: "scheduled_at must be a valid date" }, { status: 400 });
+    }
+    const scheduledEnd = new Date(scheduledStart.getTime() + bookingMinutes * 60_000);
+
+    const serviceRole = createServiceRoleClient();
+    const { data: conflict, error: conflictError } = await serviceRole.rpc("technician_schedule_conflict", {
+      p_technician_id: estimate.technician_id,
+      p_start: scheduledStart.toISOString(),
+      p_end: scheduledEnd.toISOString(),
+    });
+    if (conflictError) throw conflictError;
+    if (conflict) {
+      return NextResponse.json(
+        {
+          error:
+            "That time clashes with another appointment this technician already has. Please choose a different slot.",
+        },
+        { status: 409 }
+      );
+    }
+
     const { data: booking, error } = await supabase
       .from("bookings")
       .insert({
@@ -59,6 +93,7 @@ export async function POST(request: NextRequest) {
         estimate_id,
         customer_id: user.id,
         scheduled_at,
+        duration_minutes: bookingMinutes,
         notes: notes ?? null,
         status: "pending",
       })
@@ -69,21 +104,37 @@ export async function POST(request: NextRequest) {
 
     await supabase
       .from("service_requests")
-      .update({ status: "booked", updated_at: new Date().toISOString() })
+      .update({
+        status: "booked",
+        updated_at: new Date().toISOString(),
+        // The confirmed appointment replaces the (optional) preference the
+        // customer gave with the request, so the queue engine and the schedule
+        // agree on one window.
+        requested_window_start: scheduledStart.toISOString(),
+        requested_window_end: scheduledEnd.toISOString(),
+        requested_duration_minutes: bookingMinutes,
+      })
       .eq("id", service_request_id);
     await supabase.from("estimates").update({ status: "accepted" }).eq("id", estimate_id);
 
-    const { data: tech } = await supabase
+    // Capacity is computed from real appointments, so the legacy
+    // `active_job_load` counter is refreshed with the service-role client: a
+    // customer updating a technician row is blocked by RLS, which is why this
+    // counter used to drift.
+    const { data: tech } = await serviceRole
       .from("technicians")
       .select("active_job_load")
       .eq("id", estimate.technician_id)
       .single();
     if (tech) {
-      await supabase
+      await serviceRole
         .from("technicians")
         .update({ active_job_load: tech.active_job_load + 1 })
         .eq("id", estimate.technician_id);
     }
+    await serviceRole.rpc("refresh_technician_operational_status", {
+      p_technician_id: estimate.technician_id,
+    });
 
     return NextResponse.json({ data: booking }, { status: 201 });
   } catch (err) {

@@ -75,7 +75,7 @@ export default async function AdminProgressManagementPage() {
         />
       </div>
 
-      <div className="mt-8 overflow-x-auto rounded-card border border-ink/8 bg-white shadow-card">
+      <div className="mt-8 overflow-x-auto rounded-card border border-ink/8 bg-surface shadow-card">
         <table className="min-w-[760px] w-full text-left text-sm">
           <thead className="border-b border-ink/8 bg-canvas text-xs uppercase tracking-wide text-ink/40">
             <tr>
@@ -153,7 +153,7 @@ function firstTimeFixRate(
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-card border border-ink/8 bg-white p-3 shadow-card">
+    <div className="rounded-card border border-ink/8 bg-surface p-3 shadow-card">
       <p className="font-display text-lg font-semibold text-ink">{value}</p>
       <p className="mt-0.5 text-xs text-ink/50">{label}</p>
     </div>

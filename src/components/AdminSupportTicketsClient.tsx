@@ -14,9 +14,9 @@ const STATUS_OPTIONS: TicketStatus[] = ["open", "in_progress", "resolved", "clos
 
 const PRIORITY_COLOR: Record<TicketPriority, string> = {
   low: "bg-ink/5 text-ink/50",
-  medium: "bg-brand-50 text-brand-600",
-  high: "bg-spark-50 text-spark-700",
-  critical: "bg-alert-50 text-alert-600",
+  medium: "bg-brand-soft text-brand-ink",
+  high: "bg-brand-soft text-brand-ink",
+  critical: "bg-alert-soft text-alert-ink",
 };
 
 export default function AdminSupportTicketsClient({
@@ -56,7 +56,7 @@ export default function AdminSupportTicketsClient({
 
   return (
     <div className="mt-6">
-      <div className="mb-3 flex items-center gap-2 rounded-lg border border-ink/15 bg-white px-3 py-2">
+      <div className="mb-3 flex items-center gap-2 rounded-lg border border-ink/15 bg-surface px-3 py-2">
         <Search className="h-4 w-4 text-ink/35" />
         <input
           value={search}
@@ -66,7 +66,7 @@ export default function AdminSupportTicketsClient({
         />
       </div>
 
-      <div className="overflow-x-auto rounded-card border border-ink/8 bg-white shadow-card">
+      <div className="overflow-x-auto rounded-card border border-ink/8 bg-surface shadow-card">
         <table className="min-w-[720px] w-full text-left text-sm">
           <thead className="border-b border-ink/8 bg-canvas text-xs uppercase tracking-wide text-ink/40">
             <tr>

@@ -78,12 +78,12 @@ export default function EstimatesClient({
 
   return (
     <div className="mt-6 space-y-4">
-      {error && <p className="text-sm text-alert-500">{error}</p>}
+      {error && <p className="text-sm text-alert-ink">{error}</p>}
       {estimates.map((est) => {
         const request = requestInfo[est.service_request_id];
         const isScheduling = schedulingId === est.id;
         return (
-          <div key={est.id} className="rounded-card border border-ink/8 bg-white p-5 shadow-card">
+          <div key={est.id} className="rounded-card border border-ink/8 bg-surface p-5 shadow-card">
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium capitalize text-ink/50">
                 {request?.appliance_type.replace("_", " ") ?? "Repair"}
@@ -136,7 +136,7 @@ export default function EstimatesClient({
                     <button
                       onClick={() => handleReject(est.id)}
                       disabled={busyId === est.id}
-                      className="flex-1 rounded-full border border-alert-500/30 px-4 py-2 text-sm font-semibold text-alert-500 hover:bg-alert-50 disabled:opacity-50"
+                      className="flex-1 rounded-full border border-alert-500/30 px-4 py-2 text-sm font-semibold text-alert-ink hover:bg-alert-soft disabled:opacity-50"
                     >
                       {busyId === est.id ? "..." : "Reject"}
                     </button>

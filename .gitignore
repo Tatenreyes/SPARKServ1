@@ -17,6 +17,12 @@
 .DS_Store
 *.pem
 
+# local dev / debug output
+*.log
+
+# agent tooling scratch (Cline/buddy state, trajectories, chats)
+/.refact/
+
 # env files
 .env
 .env*.local

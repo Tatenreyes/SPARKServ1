@@ -142,9 +142,9 @@ export default async function AdminDashboard() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-600">Admin Dashboard</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-ink">Admin Dashboard</p>
           <h1 className="mt-2 font-display text-3xl font-bold text-ink">Welcome back, Admin</h1>
-          <p className="mt-1.5 text-sm text-slate-500">Monitor operations, technicians, and platform health.</p>
+          <p className="mt-1.5 text-sm text-muted">Monitor operations, technicians, and platform health.</p>
         </div>
         <Link href="/admin/technicians" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 hover:shadow-md">
           Review Pending Technicians
@@ -153,22 +153,22 @@ export default async function AdminDashboard() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <DashboardStatCard label="Total Technicians" value={technicianCount ?? 0} hint="Approved" href="/admin/technicians" icon={Users} />
-        <DashboardStatCard label="Active Jobs" value={activeRepairs ?? 0} hint="In progress" href="/admin/job-monitoring" icon={Wrench} />
-        <DashboardStatCard label="Pending Approvals" value={pendingApprovals ?? 0} hint="Needs review" href="/admin/technicians" icon={ShieldCheck} />
-        <DashboardStatCard label="Open Requests" value={openRequests ?? 0} hint="Waiting for action" href="/admin/dashboard" icon={BriefcaseBusiness} />
-        <DashboardStatCard label="Support Tickets" value={supportTickets ?? 0} hint="Open issues" href="/admin/support-tickets" icon={CircleAlert} />
+        <DashboardStatCard label="Total Technicians" value={technicianCount ?? 0} href="/admin/technicians" icon={Users} colorClass="bg-brand-soft text-brand-ink" />
+        <DashboardStatCard label="Active Jobs" value={activeRepairs ?? 0} href="/admin/job-monitoring" icon={Wrench} colorClass="bg-brand-soft text-brand-ink" />
+        <DashboardStatCard label="Pending Approvals" value={pendingApprovals ?? 0} href="/admin/technicians" icon={ShieldCheck} colorClass="bg-yellow-50 text-yellow-600" />
+        <DashboardStatCard label="Open Requests" value={openRequests ?? 0} href="/admin/dashboard" icon={BriefcaseBusiness} colorClass="bg-brand-soft text-brand-ink" />
+        <DashboardStatCard label="Support Tickets" value={supportTickets ?? 0} href="/admin/support-tickets" icon={CircleAlert} colorClass="bg-alert-soft text-alert-ink" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <DashboardPanel title="Active Bookings & Queue" className="min-h-[280px]">
           {!activeBookings?.length ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-soft text-muted/80">
                 <CalendarClock className="h-6 w-6" />
               </div>
-              <p className="mt-4 text-sm font-medium text-slate-600">No active bookings right now</p>
-              <p className="mt-1 text-xs text-slate-400">Active jobs will appear here once scheduled.</p>
+              <p className="mt-4 text-sm font-medium text-muted">No active bookings right now</p>
+              <p className="mt-1 text-xs text-muted/80">Active jobs will appear here once scheduled.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -177,13 +177,13 @@ export default async function AdminDashboard() {
                 return (
                   <div
                     key={booking.id}
-                    className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 rounded-2xl border border-line bg-soft p-4 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0">
-                      <p className="font-display text-sm font-semibold capitalize text-slate-900">
+                      <p className="font-display text-sm font-semibold capitalize text-ink">
                         {request?.appliance_type?.replace(/_/g, " ") ?? "Repair"}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-muted">
                         {technicianMap.get(booking.technician_id) ?? "Unknown technician"} ·{" "}
                         {new Date(booking.scheduled_at).toLocaleString()}
                       </p>
@@ -199,31 +199,35 @@ export default async function AdminDashboard() {
         <div className="space-y-6">
           <DashboardPanel title="Attention Required">
             <div className="space-y-3">
-              <Link href="/admin/technicians" className="flex items-start gap-3 rounded-2xl border border-spark-200 bg-spark-50 p-3 transition hover:bg-spark-100">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-spark-100 text-spark-600">
+              {/* Tinted alert card: `brand-soft` + a brand-300 edge read the same
+                  pale-blue panel in day mode and a lifted navy panel at night.
+                  The icon disc uses `surface` so it never merges into the card
+                  fill in either theme (both were `spark-*` before). */}
+              <Link href="/admin/technicians" className="flex items-start gap-3 rounded-2xl border border-brand-300/50 bg-brand-soft p-3 transition hover:border-brand-400">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-brand-ink ring-1 ring-inset ring-brand-300/60">
                   <ShieldCheck className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-spark-800">{pendingApprovals ?? 0} technicians pending approval</p>
-                  <p className="text-xs text-spark-600">Review and approve new technician accounts.</p>
+                  <p className="text-sm font-semibold text-brand-ink">{pendingApprovals ?? 0} technicians pending approval</p>
+                  <p className="text-xs text-brand-ink/80">Review and approve new technician accounts.</p>
                 </div>
               </Link>
-              <Link href="/admin/dashboard" className="flex items-start gap-3 rounded-2xl border border-brand-100 bg-brand-50 p-3 transition hover:bg-brand-100">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600">
+              <Link href="/admin/dashboard" className="flex items-start gap-3 rounded-2xl border border-brand-300/50 bg-brand-soft p-3 transition hover:border-brand-400">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-brand-ink ring-1 ring-inset ring-brand-300/60">
                   <BriefcaseBusiness className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-brand-700">{openRequests ?? 0} open service requests</p>
-                  <p className="text-xs text-brand-600">Requests waiting for technician assignment.</p>
+                  <p className="text-sm font-semibold text-brand-ink">{openRequests ?? 0} open service requests</p>
+                  <p className="text-xs text-brand-ink/80">Requests waiting for technician assignment.</p>
                 </div>
               </Link>
-              <Link href="/admin/support-tickets" className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 transition hover:bg-slate-100">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+              <Link href="/admin/support-tickets" className="flex items-start gap-3 rounded-2xl border border-line bg-soft p-3 transition hover:border-brand-300">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-muted ring-1 ring-inset ring-line">
                   <CircleAlert className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-700">{supportTickets ?? 0} support tickets open</p>
-                  <p className="text-xs text-slate-500">Customer issues awaiting response.</p>
+                  <p className="text-sm font-semibold text-ink/80">{supportTickets ?? 0} support tickets open</p>
+                  <p className="text-xs text-muted">Customer issues awaiting response.</p>
                 </div>
               </Link>
             </div>
@@ -243,29 +247,29 @@ export default async function AdminDashboard() {
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <DashboardPanel title="Platform Activity">
           {!recentActivity?.length ? (
-            <p className="text-sm text-slate-500">No recent activity yet.</p>
+            <p className="text-sm text-muted">No recent activity yet.</p>
           ) : (
             <ul className="space-y-3">
               {recentActivity.map((r) => {
                 const statusIcon =
                   r.status === "completed" ? (
-                    <CheckCircle2 className="h-4 w-4 text-signal-500" />
+                    <CheckCircle2 className="h-4 w-4 text-signal-ink" />
                   ) : r.status === "cancelled" ? (
-                    <XCircle className="h-4 w-4 text-alert-500" />
+                    <XCircle className="h-4 w-4 text-alert-ink" />
                   ) : (
-                    <AlertCircle className="h-4 w-4 text-brand-500" />
+                    <AlertCircle className="h-4 w-4 text-brand-ink" />
                   );
                 return (
-                  <li key={r.id} className="flex items-start gap-3 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+                  <li key={r.id} className="flex items-start gap-3 border-b border-line pb-3 last:border-b-0 last:pb-0">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
                       {statusIcon}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-800 capitalize">
+                      <p className="text-sm font-medium text-ink/90 capitalize">
                         {r.appliance_type.replace(/_/g, " ")}
                       </p>
-                      <p className="mt-0.5 text-xs text-slate-500">Request in {r.location}</p>
-                      <p className="mt-1 text-[11px] text-slate-400">{timeAgo(r.created_at)}</p>
+                      <p className="mt-0.5 text-xs text-muted">Request in {r.location}</p>
+                      <p className="mt-1 text-[11px] text-muted/80">{timeAgo(r.created_at)}</p>
                     </div>
                   </li>
                 );
@@ -276,35 +280,35 @@ export default async function AdminDashboard() {
 
         <DashboardPanel title="Technician Queue Preview">
           {!queueSnapshots.length ? (
-            <p className="text-sm text-slate-500">No approved technician queues yet.</p>
+            <p className="text-sm text-muted">No approved technician queues yet.</p>
           ) : (
             <div className="space-y-4">
               {queueSnapshots.slice(0, 3).map((snapshot) => {
                 const available = snapshot.rows.filter((technician) => !technician.booked);
                 const booked = snapshot.rows.filter((technician) => technician.booked);
                 return (
-                  <div key={snapshot.type} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <h3 className="font-display text-sm font-semibold capitalize text-slate-900">
+                  <div key={snapshot.type} className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+                    <h3 className="font-display text-sm font-semibold capitalize text-ink">
                       {snapshot.type.replace(/_/g, " ")}
                     </h3>
                     <div className="mt-3 space-y-2">
                       {available.slice(0, 3).map((technician) => (
-                        <div key={technician.id} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
+                        <div key={technician.id} className="flex items-center justify-between rounded-xl border border-line px-3 py-2">
                           <div>
-                            <p className="text-xs font-semibold text-slate-800">
+                            <p className="text-xs font-semibold text-ink/90">
                               {technician.queuePosition ? `${technician.queuePosition}. ` : ""}
                               {technician.name}
                             </p>
                           </div>
-                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">
+                          <span className="rounded-full bg-signal-soft px-2 py-1 text-[10px] font-semibold text-signal-ink">
                             Available
                           </span>
                         </div>
                       ))}
                       {booked.length > 0 && (
-                        <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
-                          <p className="text-xs font-semibold text-slate-800">{booked[0].name}</p>
-                          <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                        <div className="flex items-center justify-between rounded-xl border border-line px-3 py-2">
+                          <p className="text-xs font-semibold text-ink/90">{booked[0].name}</p>
+                          <span className="rounded-full bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn-ink">
                             Booked
                           </span>
                         </div>
@@ -325,10 +329,10 @@ function QuickAction({ href, label, icon }: { href: string; label: string; icon:
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-brand-200 hover:bg-brand-50/50"
+      className="flex items-center gap-3 rounded-xl border border-line bg-surface p-3 transition hover:border-line hover:bg-brand-soft/50"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">{icon}</span>
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand-ink">{icon}</span>
+      <span className="text-sm font-medium text-ink/80">{label}</span>
     </Link>
   );
 }

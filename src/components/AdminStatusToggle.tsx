@@ -32,7 +32,7 @@ export default function AdminStatusToggle({
       onClick={toggle}
       disabled={busy}
       className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-50 ${
-        isActive ? "bg-signal-50 text-signal-600" : "bg-alert-50 text-alert-600"
+        isActive ? "bg-signal-soft text-signal-ink" : "bg-alert-soft text-alert-ink"
       }`}
     >
       {busy ? "..." : isActive ? "Active" : "Inactive"}

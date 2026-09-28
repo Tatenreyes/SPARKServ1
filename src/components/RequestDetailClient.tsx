@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CalendarClock } from "lucide-react";
+import { formatRequestedWindow } from "@/lib/service-time";
 import AssignmentStatusCard from "@/components/AssignmentStatusCard";
 import StatusBadge from "@/components/StatusBadge";
 import type { EstimateRow, ServiceRequestRow } from "@/types/database";
@@ -15,12 +17,15 @@ interface RequestDetailClientProps {
   request: ServiceRequestRow;
   initialEstimates: EstimateRow[];
   assignedTechnician: AssignedTechnician | null;
+  /** IANA zone the queue and the booking clocks run on (e.g. Asia/Manila). */
+  serviceTimeZone: string;
 }
 
 export default function RequestDetailClient({
   request,
   initialEstimates,
   assignedTechnician,
+  serviceTimeZone,
 }: RequestDetailClientProps) {
   const router = useRouter();
   const estimates = initialEstimates;
@@ -63,12 +68,17 @@ export default function RequestDetailClient({
           <StatusBadge status={request.status} />
         </div>
         {request.issue_category && (
-          <p className="mt-2 text-sm font-medium text-brand-600">{request.issue_category.replace(/_/, " ")}</p>
+          <p className="mt-2 text-sm font-medium text-brand-ink">{request.issue_category.replace(/_/, " ")}</p>
         )}
         <p className="mt-2 text-sm text-ink/65">{request.problem_description}</p>
+        <RequestedWindow
+          start={request.requested_window_start}
+          end={request.requested_window_end}
+          timeZone={serviceTimeZone}
+        />
       </div>
 
-      {error && <p className="text-sm text-alert-500">{error}</p>}
+      {error && <p className="text-sm text-alert-ink">{error}</p>}
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-ink">Technician</h2>
@@ -76,6 +86,7 @@ export default function RequestDetailClient({
           status={request.assignment_status}
           applianceType={request.appliance_type}
           technician={assignedTechnician}
+          offersExpiresAt={request.offers_expires_at}
         />
       </section>
 
@@ -123,4 +134,29 @@ export default function RequestDetailClient({
       </section>
     </div>
   );
+
+/**
+ * The window this customer asked for, echoed back on their own request so they
+ * can confirm SPARKServ recorded it. Deliberately says "no time preference"
+ * rather than rendering nothing: the queue treats "no preference" and "a window
+ * the queue checked" very differently, and the customer should see which one.
+ */
+function RequestedWindow({
+  start,
+  end,
+  timeZone,
+}: {
+  start: string | null;
+  end: string | null;
+  timeZone: string;
+}) {
+  const label = formatRequestedWindow(start, end, timeZone);
+  return (
+    <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-ink/70">
+      <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+      {label ? <span>You asked for {label}</span> : <span>Any time works — you agree the slot with your technician</span>}
+    </p>
+  );
+}
+
 }

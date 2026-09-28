@@ -36,7 +36,7 @@ export default function EstimateForm({ serviceRequestId }: { serviceRequestId: s
   }
 
   if (done) {
-    return <p className="mt-2 text-xs text-signal-600">Estimate submitted.</p>;
+    return <p className="mt-2 text-xs text-signal-ink">Estimate submitted.</p>;
   }
 
   if (!open) {
@@ -75,7 +75,7 @@ export default function EstimateForm({ serviceRequestId }: { serviceRequestId: s
       >
         {submitting ? "Sending..." : "Send estimate"}
       </button>
-      {error && <p className="w-full text-xs text-alert-500">{error}</p>}
+      {error && <p className="w-full text-xs text-alert-ink">{error}</p>}
     </div>
   );
 }

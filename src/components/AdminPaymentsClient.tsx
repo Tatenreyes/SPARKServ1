@@ -5,9 +5,9 @@ import { Search } from "lucide-react";
 import type { PaymentRow } from "@/types/database";
 
 const STATUS_COLOR: Record<string, string> = {
-  pending_verification: "bg-spark-50 text-spark-700",
-  confirmed: "bg-signal-50 text-signal-600",
-  rejected: "bg-alert-50 text-alert-600",
+  pending_verification: "bg-brand-soft text-brand-ink",
+  confirmed: "bg-signal-soft text-signal-ink",
+  rejected: "bg-alert-soft text-alert-ink",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -55,7 +55,7 @@ export default function AdminPaymentsClient({
 
   return (
     <div className="mt-6">
-      <div className="mb-3 flex items-center gap-2 rounded-lg border border-ink/15 bg-white px-3 py-2">
+      <div className="mb-3 flex items-center gap-2 rounded-lg border border-ink/15 bg-surface px-3 py-2">
         <Search className="h-4 w-4 text-ink/35" />
         <input
           value={search}
@@ -65,7 +65,7 @@ export default function AdminPaymentsClient({
         />
       </div>
 
-      <div className="overflow-x-auto rounded-card border border-ink/8 bg-white shadow-card">
+      <div className="overflow-x-auto rounded-card border border-ink/8 bg-surface shadow-card">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-ink/8 bg-canvas text-xs uppercase tracking-wide text-ink/40">
             <tr>
@@ -109,7 +109,7 @@ export default function AdminPaymentsClient({
                         <button
                           onClick={() => updateStatus(p.id, "rejected")}
                           disabled={busyId === p.id}
-                          className="rounded-full border border-alert-500/30 px-3 py-1 text-xs font-semibold text-alert-500 hover:bg-alert-50 disabled:opacity-50"
+                          className="rounded-full border border-alert-500/30 px-3 py-1 text-xs font-semibold text-alert-ink hover:bg-alert-soft disabled:opacity-50"
                         >
                           Reject
                         </button>

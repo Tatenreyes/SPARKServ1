@@ -26,6 +26,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "amount must be positive and reference is required" }, { status: 400 });
     }
 
+    // GCash references are digits (with occasional dashes/spaces). Validating
+    // strictly matters here because the value is interpolated into a PostgREST
+    // filter below — a stray comma or parenthesis would otherwise let the
+    // caller rewrite that query.
+    const reference = String(gcash_reference).trim();
+    if (!/^[A-Za-z0-9-]{6,32}$/.test(reference)) {
+      return NextResponse.json(
+        { error: "Reference number must be 6-32 characters: letters, numbers, or dashes only" },
+        { status: 400 }
+      );
+    }
+
     const supabase = createClient();
 
     const { data: booking, error: bookingError } = await supabase
@@ -47,7 +59,7 @@ export async function POST(request: NextRequest) {
     const { data: existingPayment } = await supabase
       .from("payments")
       .select("id")
-      .or(`booking_id.eq.${booking_id},gcash_reference.eq.${String(gcash_reference).trim()}`)
+      .or(`booking_id.eq.${booking_id},gcash_reference.eq.${reference}`)
       .in("status", ["pending_verification", "confirmed"])
       .maybeSingle();
     if (existingPayment) {
@@ -59,7 +71,7 @@ export async function POST(request: NextRequest) {
       .insert({
         booking_id,
         customer_id: user.id,
-        gcash_reference: String(gcash_reference).trim(),
+        gcash_reference: reference,
         amount,
         status: "pending_verification",
       })

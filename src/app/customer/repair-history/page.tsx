@@ -54,7 +54,7 @@ export default async function RepairHistoryPage() {
       ) : (
         <div className="mt-8 space-y-3">
           {history.map((h) => (
-            <div key={h.id} className="rounded-card border border-ink/8 bg-white p-4 shadow-card">
+            <div key={h.id} className="rounded-card border border-ink/8 bg-surface p-4 shadow-card">
               <div className="flex items-center justify-between">
                 <p className="font-medium capitalize text-ink">
                   {h.appliance_type.replace("_", " ")}
@@ -85,7 +85,7 @@ function SummaryCard({
   value: string;
 }) {
   return (
-    <div className="rounded-card border border-ink/8 bg-white p-3 shadow-card">
+    <div className="rounded-card border border-ink/8 bg-surface p-3 shadow-card">
       <div className="flex items-center gap-1.5 text-ink/40">
         {icon}
         <span className="text-xs">{label}</span>

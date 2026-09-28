@@ -29,7 +29,7 @@ export default async function AdminBookingReviewPage() {
       <h1 className="font-display text-2xl font-semibold text-ink">Booking review</h1>
       <p className="mt-1 text-sm text-ink/65">Oversight of every booking on the platform.</p>
 
-      <div className="mt-6 overflow-x-auto rounded-card border border-ink/8 bg-white shadow-card">
+      <div className="mt-6 overflow-x-auto rounded-card border border-ink/8 bg-surface shadow-card">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-ink/8 bg-canvas text-xs uppercase tracking-wide text-ink/40">
             <tr>

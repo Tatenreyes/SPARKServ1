@@ -11,9 +11,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  pending_verification: "bg-spark-50 text-spark-700",
-  confirmed: "bg-signal-50 text-signal-600",
-  rejected: "bg-alert-50 text-alert-600",
+  pending_verification: "bg-brand-soft text-brand-ink",
+  confirmed: "bg-signal-soft text-signal-ink",
+  rejected: "bg-alert-soft text-alert-ink",
 };
 
 export default function PaymentForm({
@@ -56,7 +56,7 @@ export default function PaymentForm({
   }
 
   return (
-    <div className="rounded-card border border-ink/8 bg-white p-5 shadow-card">
+    <div className="rounded-card border border-ink/8 bg-surface p-5 shadow-card">
       <h3 className="font-display text-base font-semibold text-ink">Payment</h3>
       <p className="mt-1 text-xs text-ink/50">
         Pay the technician via GCash, then submit the reference number here so admin can
@@ -96,7 +96,7 @@ export default function PaymentForm({
             placeholder="Amount paid (₱)"
             className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
           />
-          {error && <p className="text-xs text-alert-500">{error}</p>}
+          {error && <p className="text-xs text-alert-ink">{error}</p>}
           <button
             type="submit"
             disabled={submitting}

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceTimezone } from "@/lib/service-time";
 import RequestDetailClient from "@/components/RequestDetailClient";
 
 export default async function ServiceRequestDetailPage({
@@ -8,6 +9,7 @@ export default async function ServiceRequestDetailPage({
   params: { id: string };
 }) {
   const supabase = createClient();
+  const serviceTimeZone = await getServiceTimezone(supabase);
 
   const { data: request } = await supabase
     .from("service_requests")
@@ -38,6 +40,7 @@ export default async function ServiceRequestDetailPage({
       request={request}
       initialEstimates={estimates ?? []}
       assignedTechnician={assignedTechnician}
+      serviceTimeZone={serviceTimeZone}
     />
   );
 }

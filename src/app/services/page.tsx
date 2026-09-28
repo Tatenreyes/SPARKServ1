@@ -65,7 +65,7 @@ const steps = [
 
 export default function ServicesPage() {
   return (
-    <main className="bg-white">
+    <main className="bg-surface">
       <section className="relative overflow-hidden bg-brand-900 text-white">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_35%,_rgba(37,101,218,0.2),transparent_32%)]" />
         <div className="spark-section relative px-4 py-16 md:py-24">
@@ -102,9 +102,9 @@ export default function ServicesPage() {
                 key={service.title}
                 variants={cardFadeUp}
                 whileHover={{ y: -6, transition: { duration: 0.2 } }}
-                className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-lg"
+                className="group relative overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition hover:shadow-lg"
               >
-                <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100">
+                <div className="aspect-[4/3] w-full overflow-hidden bg-soft">
                   <Image
                     src={service.image}
                     alt={service.title}
@@ -115,7 +115,7 @@ export default function ServicesPage() {
                 </div>
                 <div className="p-5">
                   <h3 className="font-display text-base font-bold text-ink">{service.title}</h3>
-                  <p className="mt-1.5 text-sm leading-6 text-slate-600">{service.description}</p>
+                  <p className="mt-1.5 text-sm leading-6 text-muted">{service.description}</p>
                 </div>
               </motion.div>
             ))}
@@ -123,7 +123,7 @@ export default function ServicesPage() {
         </motion.div>
       </section>
 
-      <section className="bg-slate-50 border-y border-slate-200">
+      <section className="bg-soft border-y border-line">
         <div className="spark-section py-16 md:py-24">
           <motion.div
             initial="hidden"
@@ -132,7 +132,7 @@ export default function ServicesPage() {
             variants={staggerContainer(0.1)}
           >
             <div className="text-center max-w-2xl mx-auto mb-14">
-              <motion.span variants={fadeUp} className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-600">
+              <motion.span variants={fadeUp} className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-ink">
                 How It Works
               </motion.span>
               <motion.h2 variants={fadeUp} className="mt-3 text-3xl font-bold text-ink sm:text-4xl">
@@ -144,14 +144,14 @@ export default function ServicesPage() {
                 <motion.div
                   key={step.number}
                   variants={fadeUp}
-                  className="relative rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
+                  className="relative rounded-2xl border border-line bg-surface p-7 shadow-sm"
                 >
                   <div className="flex items-center gap-4 mb-4">
                     <span className="font-display text-3xl font-bold text-brand-200">{step.number}</span>
-                    <div className="h-px flex-1 bg-slate-200" />
+                    <div className="h-px flex-1 bg-line" />
                   </div>
                   <h3 className="font-display text-lg font-bold text-ink">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{step.description}</p>
+                  <p className="mt-2 text-sm leading-6 text-muted">{step.description}</p>
                 </motion.div>
               ))}
             </div>
@@ -167,7 +167,7 @@ export default function ServicesPage() {
           variants={staggerContainer(0.1)}
         >
           <div className="text-center max-w-2xl mx-auto mb-14">
-            <motion.span variants={fadeUp} className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-600">
+            <motion.span variants={fadeUp} className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-ink">
               All Services
             </motion.span>
             <motion.h2 variants={fadeUp} className="mt-3 text-3xl font-bold text-ink sm:text-4xl">
@@ -181,14 +181,14 @@ export default function ServicesPage() {
                 <motion.div key={service.slug} variants={cardFadeUp}>
                   <Link
                     href={`/services/${service.slug}`}
-                    className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-1 hover:border-brand-500 hover:shadow-lg"
+                    className="group flex flex-col rounded-2xl border border-line bg-surface p-6 transition hover:-translate-y-1 hover:border-brand-500 hover:shadow-lg"
                   >
-                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
                       <Icon className="h-5 w-5" />
                     </span>
-                    <h2 className="mt-5 text-xl font-semibold text-slate-950">{service.name}</h2>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{service.description}</p>
-                    <span className="mt-5 inline-flex items-center text-sm font-semibold text-brand-600">
+                    <h2 className="mt-5 text-xl font-semibold text-ink">{service.name}</h2>
+                    <p className="mt-2 text-sm leading-6 text-muted">{service.description}</p>
+                    <span className="mt-5 inline-flex items-center text-sm font-semibold text-brand-ink">
                       View service <ArrowRight className="ml-2 h-4 w-4 transition group-hover:translate-x-1" />
                     </span>
                   </Link>
@@ -228,9 +228,13 @@ export default function ServicesPage() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="mt-9 flex flex-wrap justify-center gap-4"
             >
+              {/* Fixed white, not `bg-surface`: this CTA floats on the
+                  `bg-brand-900` band, which stays navy in BOTH themes. A theme
+                  token here would turn the button into a dark hole on navy in
+                  dark mode, and `text-brand-ink` would go light-on-light. */}
               <Link
                 href="/customer/request-repair"
-                className="inline-flex h-12 items-center justify-center rounded-xl bg-white px-8 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50"
+                className="inline-flex h-12 items-center justify-center rounded-xl bg-white px-8 text-sm font-semibold text-navy-900 shadow-sm transition hover:bg-white/90"
               >
                 Book a Service <ArrowRight className="ml-2 h-4 w-4" />
               </Link>

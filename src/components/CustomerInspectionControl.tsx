@@ -62,7 +62,7 @@ export default function CustomerInspectionControl({
   }
 
   return (
-    <div className="rounded-card border border-spark-400/30 bg-spark-50 p-5">
+    <div className="rounded-card border border-spark-400/30 bg-brand-soft p-5">
       <h3 className="font-display text-base font-semibold text-ink">
         Please check your appliance before completing payment
       </h3>
@@ -70,7 +70,7 @@ export default function CustomerInspectionControl({
         Take a moment to confirm the repair actually fixed the problem.
       </p>
 
-      {error && <p className="mt-2 text-sm text-alert-500">{error}</p>}
+      {error && <p className="mt-2 text-sm text-alert-ink">{error}</p>}
 
       {!reportingProblem ? (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -84,7 +84,7 @@ export default function CustomerInspectionControl({
           </button>
           <button
             onClick={() => setReportingProblem(true)}
-            className="flex items-center gap-1.5 rounded-full border border-alert-500/30 px-4 py-2 text-sm font-semibold text-alert-500 hover:bg-white"
+            className="flex items-center gap-1.5 rounded-full border border-alert-500/30 px-4 py-2 text-sm font-semibold text-alert-ink hover:bg-surface"
           >
             <AlertTriangle className="h-4 w-4" />
             I still have a problem

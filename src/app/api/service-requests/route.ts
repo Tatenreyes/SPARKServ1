@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getCurrentUser, AuthError } from "@/lib/auth";
 import { assignTechnician } from "@/lib/assignment";
+import { readRequestedWindow } from "@/lib/service-time";
 
 // POST /api/service-requests — customer submits a new appliance issue.
 // Immediately triggers the fair ROTATION-based assignment engine (see
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { appliance_id, appliance_type, issue_category, problem_description, photos, chatbot_resolved, location } = body;
+    const { appliance_id, appliance_type, issue_category, problem_description, photos, chatbot_resolved, location, service_type } = body;
 
     if (!appliance_type || !problem_description) {
       return NextResponse.json(
@@ -25,6 +26,12 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createClient();
+
+    // The requested time window drives availability + capacity checks. It is
+    // optional: with no window the engine can only apply eligibility and the
+    // concurrent-workload limit, and the exact slot is agreed at booking time.
+    const window = await readRequestedWindow(supabase, body);
+
     const { data: created, error } = await supabase
       .from("service_requests")
       .insert({
@@ -36,7 +43,14 @@ export async function POST(request: NextRequest) {
         photos: Array.isArray(photos) ? photos : [],
         chatbot_resolved: Boolean(chatbot_resolved),
         location: location ?? null,
+        // The wizard collects on_site / home_service / pickup; this used to be
+        // dropped on the floor, so every request was stored as the column
+        // default ("repair") and the customer's actual choice was lost.
+        service_type: service_type ?? "repair",
         status: "open",
+        requested_window_start: window.start,
+        requested_window_end: window.end,
+        requested_duration_minutes: window.durationMinutes,
       })
       .select()
       .single();
@@ -61,6 +75,7 @@ export async function POST(request: NextRequest) {
     return handleError(err);
   }
 }
+
 
 // GET /api/service-requests — list requests scoped to the caller's role
 export async function GET() {
@@ -97,5 +112,21 @@ function handleError(err: unknown) {
     return NextResponse.json({ error: err.message }, { status: err.status });
   }
   console.error(err);
-  return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+
+  // An opaque "Internal server error" is why a schema drift like a missing
+  // column stays invisible: the browser only ever sees the 500, and the real
+  // PostgREST message (e.g. 42703 / "column ... does not exist") is trapped in
+  // the server log. Echo the database's own wording in development only —
+  // production keeps the generic response so internals are never leaked.
+  const detail =
+    process.env.NODE_ENV === "production"
+      ? null
+      : {
+          code: (err as { code?: string })?.code ?? null,
+          message: err instanceof Error ? err.message : String(err),
+          details: (err as { details?: string })?.details ?? null,
+          hint: (err as { hint?: string })?.hint ?? null,
+        };
+
+  return NextResponse.json({ error: "Internal server error", detail }, { status: 500 });
 }

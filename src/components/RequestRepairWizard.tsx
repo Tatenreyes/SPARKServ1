@@ -2,12 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, AlertCircle, Wrench } from "lucide-react";
+import { AlertCircle, Wrench, CheckCircle2 } from "lucide-react";
 import AssignmentStatusCard from "@/components/AssignmentStatusCard";
 import { createClient } from "@/lib/supabase/client";
 import type { ApplianceRow, AssignmentStatus } from "@/types/database";
-
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 const APPLIANCE_TYPES = [
   "Refrigerator",
@@ -54,13 +52,13 @@ const BRANDS: Record<string, string[]> = {
 export default function RequestRepairWizard() {
   const router = useRouter();
   const supabase = createClient();
-  const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [selectedApplianceId, setSelectedApplianceId] = useState<string | null>(null);
-  const [customerAppliances, setCustomerAppliances] = useState<ApplianceRow[]>([]);
-  const [useExisting, setUseExisting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [serviceRequestId, setServiceRequestId] = useState<string | null>(null);
+  const [assignmentStatus, setAssignmentStatus] = useState<AssignmentStatus>("matching");
+  const [assignedTechnician, setAssignedTechnician] = useState<{ id: string; name: string } | null>(null);
+  const [offersExpiresAt, setOffersExpiresAt] = useState<string | null>(null);
 
   const [applianceType, setApplianceType] = useState("");
   const [brand, setBrand] = useState("");
@@ -68,20 +66,32 @@ export default function RequestRepairWizard() {
   const [serialNumber, setSerialNumber] = useState("");
   const [purchaseDate, setPurchaseDate] = useState("");
   const [warrantyStatus, setWarrantyStatus] = useState("unknown");
-  const [warrantyType, setWarrantyType] = useState("");
   const [warrantyExpiryDate, setWarrantyExpiryDate] = useState("");
-
   const [selectedProblem, setSelectedProblem] = useState("");
   const [problemDescription, setProblemDescription] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
+  const [serviceType, setServiceType] = useState("on_site");
+  const [preferredDate, setPreferredDate] = useState("");
+  const [preferredStart, setPreferredStart] = useState("");
+  const [preferredEnd, setPreferredEnd] = useState("");
+  const [serviceAddress, setServiceAddress] = useState("");
+  const [additionalNotes, setAdditionalNotes] = useState("");
 
-  const [serviceRequestId, setServiceRequestId] = useState<string | null>(null);
-  const [assignmentStatus, setAssignmentStatus] = useState<AssignmentStatus>("matching");
-  const [assignedTechnician, setAssignedTechnician] = useState<{ id: string; name: string } | null>(null);
+  const [customerAppliances, setCustomerAppliances] = useState<ApplianceRow[]>([]);
+  const [useExistingAppliance, setUseExistingAppliance] = useState(false);
+  const [selectedExistingId, setSelectedExistingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (useExisting && selectedApplianceId) {
-      const appliance = customerAppliances.find((a) => a.id === selectedApplianceId);
+    async function loadAppliances() {
+      const { data } = await supabase.from("appliances").select("*").order("created_at", { ascending: false });
+      if (data) setCustomerAppliances(data);
+    }
+    loadAppliances();
+  }, [supabase]);
+
+  useEffect(() => {
+    if (useExistingAppliance && selectedExistingId) {
+      const appliance = customerAppliances.find((a) => a.id === selectedExistingId);
       if (appliance) {
         setApplianceType(appliance.appliance_type);
         setBrand(appliance.brand ?? "");
@@ -89,86 +99,95 @@ export default function RequestRepairWizard() {
         setSerialNumber(appliance.serial_number ?? "");
         setPurchaseDate(appliance.purchase_date ?? "");
         setWarrantyStatus(appliance.warranty_status);
-        setWarrantyType(appliance.warranty_type ?? "");
         setWarrantyExpiryDate(appliance.warranty_expiry_date ?? "");
       }
     }
-  }, [useExisting, selectedApplianceId, customerAppliances]);
-
-  useEffect(() => {
-    async function loadCustomerAppliances() {
-      const { data, error } = await supabase.from("appliances").select("*").order("created_at", { ascending: false });
-      if (!error && data) {
-        setCustomerAppliances(data);
-      }
-    }
-    loadCustomerAppliances();
-  }, [supabase]);
+  }, [useExistingAppliance, selectedExistingId, customerAppliances]);
 
   function getProblemsForType(type: string): string[] {
     return APPLIANCE_PROBLEMS[type] || ["Other"];
   }
 
-  async function createApplianceAndContinue() {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
     setSubmitting(true);
     setError(null);
 
-    try {
-      const { data, error } = await supabase
-        .from("appliances")
-        .insert({
-          appliance_type: applianceType,
-          brand: brand || null,
-          model_number: modelNumber || null,
-          serial_number: serialNumber || null,
-          purchase_date: purchaseDate || null,
-          warranty_status: warrantyStatus,
-          warranty_type: warrantyType || null,
-          warranty_expiry_date: warrantyExpiryDate || null,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      setSelectedApplianceId(data.id);
-      setStep(3);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save appliance");
-    } finally {
+    // A requested window has to be a real window: the queue compares it against
+    // bookings, so an end time at or before the start would match nobody.
+    if (preferredDate && (preferredStart || preferredEnd) && !(preferredStart && preferredEnd)) {
+      setError("Fill in both a start and an end time, or leave both blank.");
       setSubmitting(false);
+      return;
     }
-  }
-
-  async function submitServiceRequest() {
-    if (!selectedApplianceId) {
-      setError("Please select or create an appliance first");
+    if (preferredDate && preferredStart && preferredEnd && preferredEnd <= preferredStart) {
+      setError("The preferred end time must be after the start time.");
+      setSubmitting(false);
       return;
     }
 
-    setSubmitting(true);
-    setError(null);
-
     try {
+      let applianceId: string | null = null;
+
+      if (useExistingAppliance && selectedExistingId) {
+        applianceId = selectedExistingId;
+      } else {
+        const { data: appliance, error: applianceError } = await supabase
+          .from("appliances")
+          .insert({
+            appliance_type: applianceType,
+            brand: brand || null,
+            model_number: modelNumber || null,
+            serial_number: serialNumber || null,
+            purchase_date: purchaseDate || null,
+            warranty_status: warrantyStatus,
+            warranty_expiry_date: warrantyExpiryDate || null,
+          })
+          .select()
+          .single();
+
+        if (applianceError) throw applianceError;
+        applianceId = appliance.id;
+      }
+
       const res = await fetch("/api/service-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          appliance_id: selectedApplianceId,
+          appliance_id: applianceId,
           appliance_type: applianceType,
           issue_category: selectedProblem,
           problem_description: problemDescription,
           photos,
+          service_type: serviceType,
+          location: serviceAddress,
           chatbot_resolved: false,
+          ...(preferredDate
+            ? {
+                preferred_date: preferredDate,
+                ...(preferredStart ? { preferred_start_time: preferredStart } : {}),
+                ...(preferredEnd ? { preferred_end_time: preferredEnd } : {}),
+              }
+            : {}),
         }),
       });
 
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Failed to submit request");
+      if (!res.ok) {
+        // The API returns `detail` in development only; prefer it when present
+        // so a schema problem reads as "42703: column ... does not exist"
+        // instead of an unexplained failure.
+        const detail = json.detail?.message
+          ? ` — ${json.detail.code ?? "error"}: ${json.detail.message}`
+          : "";
+        throw new Error((json.error ?? "Failed to submit request") + detail);
+      }
 
       setServiceRequestId(json.data.id);
       setAssignmentStatus(json.data.assignment_status);
       setAssignedTechnician(json.assigned_technician ?? null);
-      setStep(6);
+      setOffersExpiresAt(json.data.offers_expires_at ?? null);
+      setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -176,105 +195,111 @@ export default function RequestRepairWizard() {
     }
   }
 
-  const stepLabels: Record<number, string> = {
-    1: "Appliance",
-    2: "Details",
-    3: "Problem",
-    4: "Photos",
-    5: "Review",
-    6: "Queue",
-  };
+  if (submitted && serviceRequestId) {
+    return (
+      <div className="max-w-2xl">
+        <div className="rounded-2xl border border-line bg-signal-soft p-8 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-signal-soft text-signal-ink">
+            <CheckCircle2 className="h-7 w-7" />
+          </div>
+          <h2 className="mt-4 font-display text-xl font-semibold text-ink">Repair Request Submitted</h2>
+          <p className="mt-2 text-sm text-muted">Your request has been submitted successfully. The system will check eligible technicians and place your request in the technician queue.</p>
+          <div className="mt-6">
+            <button
+              onClick={() => router.push(`/customer/service-request/${serviceRequestId}`)}
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-brand-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
+            >
+              View Repair Status
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <AssignmentStatusCard
+            status={assignmentStatus}
+            applianceType={applianceType}
+            technician={assignedTechnician}
+            offersExpiresAt={offersExpiresAt}
+            onBackToAppliances={() => {
+              setSubmitted(false);
+              setServiceRequestId(null);
+              setAssignedTechnician(null);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-2xl">
-      <div className="mb-6 flex flex-wrap items-center gap-1.5">
-        {([1, 2, 3, 4, 5, 6] as Step[]).map((s) => (
-          <div key={s} className="flex items-center gap-1.5">
-            <span
-              className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${
-                s === step
-                  ? "bg-brand-500 text-white"
-                  : s < step
-                    ? "bg-signal-50 text-signal-600"
-                    : "bg-ink/5 text-ink/40"
-              }`}
-            >
-              {s}. {stepLabels[s]}
-            </span>
-            {s < 6 && <ArrowRight className="h-3 w-3 text-ink/20" />}
-          </div>
-        ))}
+    <form onSubmit={handleSubmit} className="max-w-3xl space-y-8">
+      <div>
+        <h1 className="font-display text-2xl font-semibold text-ink">Request a Repair</h1>
+        <p className="mt-1 text-sm text-ink/65">Fill out the form below and we will match you with a qualified technician.</p>
       </div>
 
       {error && (
-        <div className="mb-4 flex items-start gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="flex items-start gap-2 rounded-xl bg-alert-soft px-4 py-3 text-sm text-alert-ink">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
       )}
 
-      {step === 1 && (
-        <div className="space-y-4">
-          <h2 className="font-display text-lg font-semibold text-ink">What appliance needs repair?</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {APPLIANCE_TYPES.map((type) => (
-              <button
-                key={type}
-                onClick={() => {
-                  setApplianceType(type);
-                  setStep(2);
-                }}
-                className={`flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition ${
-                  applianceType === type ? "border-brand-500 bg-brand-50" : "border-ink/8 bg-white hover:border-brand-300"
-                }`}
+      {/* Section 1: Appliance Information */}
+      <section className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
+        <h2 className="font-display text-lg font-semibold text-ink">1. Appliance Information</h2>
+
+        {customerAppliances.length > 0 && (
+          <div className="mt-4 rounded-xl border border-line bg-brand-soft p-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useExistingAppliance}
+                onChange={(e) => setUseExistingAppliance(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="text-sm font-medium text-ink/80">Use an existing appliance</span>
+            </label>
+            {useExistingAppliance && (
+              <select
+                value={selectedExistingId ?? ""}
+                onChange={(e) => setSelectedExistingId(e.target.value)}
+                className="mt-3 w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
               >
-                <Wrench className={`h-6 w-6 ${applianceType === type ? "text-brand-600" : "text-ink/50"}`} />
-                <span className="text-sm font-medium text-ink">{type}</span>
-              </button>
-            ))}
-          </div>
-
-          {customerAppliances.length > 0 && (
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-sm font-semibold text-slate-900">Or select an existing appliance:</p>
-              <div className="mt-3 space-y-2">
-                {customerAppliances.map((appliance) => (
-                  <button
-                    key={appliance.id}
-                    onClick={() => {
-                      setSelectedApplianceId(appliance.id);
-                      setUseExisting(true);
-                      setStep(3);
-                    }}
-                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-left transition hover:border-brand-200"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{appliance.appliance_type}</p>
-                      <p className="text-xs text-slate-500">
-                        {appliance.brand} {appliance.model_number} • {appliance.warranty_status === "yes" ? "Under warranty" : "No warranty"}
-                      </p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-slate-300" />
-                  </button>
+                <option value="">Select an appliance</option>
+                {customerAppliances.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.appliance_type} {a.brand ? `• ${a.brand}` : ""}
+                  </option>
                 ))}
-              </div>
+              </select>
+            )}
+          </div>
+        )}
+
+        {!useExistingAppliance && (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-ink/80">Appliance *</label>
+              <select
+                value={applianceType}
+                onChange={(e) => setApplianceType(e.target.value)}
+                required
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
+              >
+                <option value="">Select appliance</option>
+                {APPLIANCE_TYPES.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
             </div>
-          )}
-        </div>
-      )}
-
-      {step === 2 && (
-        <div className="space-y-4">
-          <h2 className="font-display text-lg font-semibold text-ink">Appliance Details</h2>
-          <p className="text-sm text-slate-600">Tell us more about your {applianceType}.</p>
-
-          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-ink/80">Brand *</label>
               <select
                 value={brand}
                 onChange={(e) => setBrand(e.target.value)}
-                className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                required
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
               >
                 <option value="">Select brand</option>
                 {(BRANDS[applianceType] || ["Other"]).map((b) => (
@@ -287,7 +312,7 @@ export default function RequestRepairWizard() {
               <input
                 value={modelNumber}
                 onChange={(e) => setModelNumber(e.target.value)}
-                className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                 placeholder="Model number"
               />
             </div>
@@ -296,7 +321,7 @@ export default function RequestRepairWizard() {
               <input
                 value={serialNumber}
                 onChange={(e) => setSerialNumber(e.target.value)}
-                className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                 placeholder="Serial number"
               />
             </div>
@@ -306,278 +331,259 @@ export default function RequestRepairWizard() {
                 type="date"
                 value={purchaseDate}
                 onChange={(e) => setPurchaseDate(e.target.value)}
-                className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
               />
             </div>
           </div>
+        )}
 
-          <div>
-            <label className="mb-2 block text-sm font-medium text-ink/80">Is this appliance still under warranty? *</label>
-            <div className="flex gap-4">
-              {["yes", "no", "unknown"].map((option) => (
-                <label key={option} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="warranty"
-                    value={option}
-                    checked={warrantyStatus === option}
-                    onChange={(e) => setWarrantyStatus(e.target.value)}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-sm text-slate-700 capitalize">{option === "unknown" ? "Not Sure" : option}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {warrantyStatus === "yes" && (
-            <div className="grid gap-4 sm:grid-cols-2 rounded-xl border border-brand-100 bg-brand-50 p-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-ink/80">Warranty Type</label>
-                <select
-                  value={warrantyType}
-                  onChange={(e) => setWarrantyType(e.target.value)}
-                  className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
-                >
-                  <option value="">Select type</option>
-                  <option value="Manufacturer Warranty">Manufacturer Warranty</option>
-                  <option value="Extended Warranty">Extended Warranty</option>
-                  <option value="Store Warranty">Store Warranty</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-ink/80">Warranty Expiry Date</label>
+        <div className="mt-4">
+          <label className="mb-2 block text-sm font-medium text-ink/80">Is it still under warranty? *</label>
+          <div className="flex gap-4">
+            {["yes", "no", "unknown"].map((option) => (
+              <label key={option} className="flex items-center gap-2 cursor-pointer">
                 <input
-                  type="date"
-                  value={warrantyExpiryDate}
-                  onChange={(e) => setWarrantyExpiryDate(e.target.value)}
-                  className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
+                  type="radio"
+                  name="warranty"
+                  value={option}
+                  checked={warrantyStatus === option}
+                  onChange={(e) => setWarrantyStatus(e.target.value)}
+                  className="h-4 w-4"
                 />
-              </div>
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setStep(1)}
-              className="rounded-full border border-ink/15 px-5 py-2.5 text-sm font-medium text-ink/70"
-            >
-              Back
-            </button>
-            <button
-              onClick={createApplianceAndContinue}
-              disabled={submitting || !brand}
-              className="rounded-full bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
-            >
-              {submitting ? "Saving..." : "Next step"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="space-y-4">
-          <h2 className="font-display text-lg font-semibold text-ink">What problem are you experiencing?</h2>
-          <p className="text-sm text-slate-600">Select the issue that best describes your {applianceType}.</p>
-
-          <div className="grid grid-cols-2 gap-3">
-            {getProblemsForType(applianceType).map((problem) => (
-              <button
-                key={problem}
-                onClick={() => setSelectedProblem(problem)}
-                className={`rounded-xl border p-3 text-left text-sm transition ${
-                  selectedProblem === problem ? "border-brand-500 bg-brand-50" : "border-ink/8 bg-white hover:border-brand-300"
-                }`}
-              >
-                {problem}
-              </button>
+                <span className="text-sm text-ink/80 capitalize">{option === "unknown" ? "Not Sure" : option}</span>
+              </label>
             ))}
           </div>
+        </div>
 
+        {warrantyStatus === "yes" && (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 rounded-xl border border-line bg-brand-soft p-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-ink/80">Warranty Expiration Date</label>
+              <input
+                type="date"
+                value={warrantyExpiryDate}
+                onChange={(e) => setWarrantyExpiryDate(e.target.value)}
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
+              />
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Section 2: Describe the Problem */}
+      <section className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
+        <h2 className="font-display text-lg font-semibold text-ink">2. Describe the Problem</h2>
+
+        <div className="mt-4">
+          <label className="mb-1 block text-sm font-medium text-ink/80">What problem are you experiencing? *</label>
+          <select
+            value={selectedProblem}
+            onChange={(e) => setSelectedProblem(e.target.value)}
+            required
+            className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
+          >
+            <option value="">Select problem</option>
+            {getProblemsForType(applianceType || "Refrigerator").map((problem) => (
+              <option key={problem} value={problem}>{problem}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mt-4">
+          <label className="mb-1 block text-sm font-medium text-ink/80">Describe the problem</label>
+          <textarea
+            value={problemDescription}
+            onChange={(e) => setProblemDescription(e.target.value)}
+            rows={4}
+            required
+            className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
+            placeholder="Tell us what happened..."
+          />
+        </div>
+      </section>
+
+      {/* Section 3: Photos */}
+      <section className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
+        <h2 className="font-display text-lg font-semibold text-ink">3. Photos / Evidence</h2>
+        <p className="mt-1 text-sm text-muted">Upload photos of the appliance, model label, or problem area.</p>
+
+        <div className="mt-4 rounded-2xl border-2 border-dashed border-ink/20 p-8 text-center">
+          <input
+            type="file"
+            multiple
+            accept="image/*,video/*"
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              const urls = files.map((f) => URL.createObjectURL(f));
+              setPhotos([...photos, ...urls]);
+            }}
+            className="hidden"
+            id="photo-upload"
+          />
+          <label htmlFor="photo-upload" className="cursor-pointer">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
+              <Wrench className="h-6 w-6" />
+            </div>
+            <p className="mt-2 text-sm font-medium text-ink/80">Click to upload photos or videos</p>
+            <p className="mt-1 text-xs text-muted">PNG, JPG, MP4 up to 10MB</p>
+          </label>
+        </div>
+
+        {photos.length > 0 && (
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            {photos.map((url, index) => (
+              <div key={index} className="relative aspect-square rounded-xl border border-line bg-soft">
+                <img src={url} alt={`Upload ${index + 1}`} className="h-full w-full rounded-xl object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setPhotos(photos.filter((_, i) => i !== index))}
+                  className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Section 4: Service Details */}
+      <section className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
+        <h2 className="font-display text-lg font-semibold text-ink">4. Service Details</h2>
+
+        <div className="mt-4">
+          <label className="mb-2 block text-sm font-medium text-ink/80">Service Type *</label>
+          <div className="flex gap-4">
+            {[
+              { value: "on_site", label: "On-site Repair" },
+              { value: "home_service", label: "Home Service" },
+              { value: "pickup_return", label: "Pickup & Return" },
+            ].map((option) => (
+              <label key={option.value} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="service_type"
+                  value={option.value}
+                  checked={serviceType === option.value}
+                  onChange={(e) => setServiceType(e.target.value)}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm text-ink/80">{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-ink/80">Describe the problem</label>
-            <textarea
-              value={problemDescription}
-              onChange={(e) => setProblemDescription(e.target.value)}
-              rows={4}
-              className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm"
-              placeholder="Tell us what happened..."
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="rounded-full border border-ink/15 px-5 py-2.5 text-sm font-medium text-ink/70"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => setStep(4)}
-              disabled={!selectedProblem || !problemDescription}
-              className="rounded-full bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
-            >
-              Next step
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 4 && (
-        <div className="space-y-4">
-          <h2 className="font-display text-lg font-semibold text-ink">Add Photos (Optional)</h2>
-          <p className="text-sm text-slate-600">Upload photos of the appliance, model label, or problem area.</p>
-
-          <div className="rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center">
+            <label className="mb-1 block text-sm font-medium text-ink/80">Preferred Service Date</label>
             <input
-              type="file"
-              multiple
-              accept="image/*,video/*"
-              onChange={(e) => {
-                const files = Array.from(e.target.files || []);
-                const urls = files.map((f) => URL.createObjectURL(f));
-                setPhotos([...photos, ...urls]);
-              }}
-              className="hidden"
-              id="photo-upload"
+              type="date"
+              value={preferredDate}
+              onChange={(e) => setPreferredDate(e.target.value)}
+              className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
             />
-            <label htmlFor="photo-upload" className="cursor-pointer">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600">
-                <Wrench className="h-6 w-6" />
-              </div>
-              <p className="mt-2 text-sm font-medium text-slate-700">Click to upload photos or videos</p>
-              <p className="mt-1 text-xs text-slate-500">PNG, JPG, MP4 up to 10MB</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-ink/80">Service Address</label>
+            <input
+              value={serviceAddress}
+              onChange={(e) => setServiceAddress(e.target.value)}
+              required
+              className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
+              placeholder="Enter service address"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-ink/80">
+              Preferred Time Window <span className="font-normal text-ink/40">(optional)</span>
             </label>
-          </div>
-
-          {photos.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
-              {photos.map((url, index) => (
-                <div key={index} className="relative aspect-square rounded-xl border border-slate-200 bg-slate-50">
-                  <img src={url} alt={`Upload ${index + 1}`} className="h-full w-full rounded-xl object-cover" />
-                  <button
-                    onClick={() => setPhotos(photos.filter((_, i) => i !== index))}
-                    className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input
+                type="time"
+                aria-label="Preferred start time"
+                value={preferredStart}
+                onChange={(e) => setPreferredStart(e.target.value)}
+                disabled={!preferredDate}
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm disabled:opacity-50"
+              />
+              <input
+                type="time"
+                aria-label="Preferred end time"
+                value={preferredEnd}
+                onChange={(e) => setPreferredEnd(e.target.value)}
+                disabled={!preferredDate}
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm disabled:opacity-50"
+              />
             </div>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setStep(3)}
-              className="rounded-full border border-ink/15 px-5 py-2.5 text-sm font-medium text-ink/70"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => setStep(5)}
-              className="rounded-full bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600"
-            >
-              Next step
-            </button>
+            <p className="mt-1 text-xs text-ink/50">
+              Times are Philippine time (GMT+8). Leave them blank if any time that day works —
+              only technicians free in your window get offered the job, and you confirm the exact
+              slot with your technician before the visit.
+            </p>
           </div>
         </div>
-      )}
 
-      {step === 5 && (
-        <div className="space-y-4">
-          <h2 className="font-display text-lg font-semibold text-ink">Review Your Request</h2>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Appliance</p>
-              <p className="mt-1 text-sm font-medium text-slate-900">{applianceType}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Brand / Model</p>
-              <p className="mt-1 text-sm text-slate-700">{brand} {modelNumber}</p>
-            </div>
-            {serialNumber && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Serial Number</p>
-                <p className="mt-1 text-sm text-slate-700">{serialNumber}</p>
-              </div>
-            )}
-            {purchaseDate && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Purchase Date</p>
-                <p className="mt-1 text-sm text-slate-700">{new Date(purchaseDate).toLocaleDateString()}</p>
-              </div>
-            )}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Warranty Status</p>
-              <p className="mt-1 text-sm text-slate-700 capitalize">{warrantyStatus}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Problem</p>
-              <p className="mt-1 text-sm font-medium text-slate-900">{selectedProblem}</p>
-              <p className="mt-1 text-sm text-slate-600">{problemDescription}</p>
-            </div>
-            {photos.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Photos</p>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {photos.map((url, index) => (
-                    <img key={index} src={url} alt={`Upload ${index + 1}`} className="h-20 w-full rounded-lg object-cover" />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setStep(4)}
-              className="rounded-full border border-ink/15 px-5 py-2.5 text-sm font-medium text-ink/70"
-            >
-              Back
-            </button>
-            <button
-              onClick={submitServiceRequest}
-              disabled={submitting}
-              className="rounded-full bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
-            >
-              {submitting ? "Submitting..." : "Submit Request"}
-            </button>
-          </div>
+        <div className="mt-4">
+          <label className="mb-1 block text-sm font-medium text-ink/80">Additional Notes</label>
+          <textarea
+            value={additionalNotes}
+            onChange={(e) => setAdditionalNotes(e.target.value)}
+            rows={3}
+            className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
+            placeholder="Anything else the technician should know..."
+          />
         </div>
-      )}
+      </section>
 
-      {step === 6 && (
-        <div>
-          {serviceRequestId && (
-            <AssignmentStatusCard
-              status={assignmentStatus}
-              applianceType={applianceType}
-              technician={assignedTechnician}
-              onBackToAppliances={() => {
-                setStep(1);
-                setServiceRequestId(null);
-                setAssignedTechnician(null);
-              }}
+      {/* Section 5: Summary */}
+      <section className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
+        <h2 className="font-display text-lg font-semibold text-ink">Repair Request Summary</h2>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <SummaryRow label="Appliance" value={applianceType || "—"} />
+          <SummaryRow label="Brand" value={brand || "—"} />
+          {modelNumber && <SummaryRow label="Model" value={modelNumber} />}
+          {serialNumber && <SummaryRow label="Serial" value={serialNumber} />}
+          <SummaryRow label="Warranty" value={warrantyStatus === "yes" ? "Yes" : warrantyStatus === "no" ? "No" : "Not Sure"} />
+          <SummaryRow label="Problem" value={selectedProblem || "—"} />
+          <SummaryRow label="Service Type" value={serviceType === "on_site" ? "On-site Repair" : serviceType === "home_service" ? "Home Service" : "Pickup & Return"} />
+          <SummaryRow label="Service Address" value={serviceAddress || "—"} />
+          {preferredDate && !preferredStart && (
+            <SummaryRow
+              label="Preferred Date"
+              value={`${new Date(`${preferredDate}T00:00:00`).toLocaleDateString()} — time to be agreed`}
             />
           )}
-          {assignmentStatus === "accepted" && (
-            <div className="mt-6 flex gap-2">
-              <button
-                onClick={() => router.push(`/customer/service-request/${serviceRequestId}`)}
-                className="rounded-full bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600"
-              >
-                View Request <ArrowRight className="ml-2 h-4 w-4 inline" />
-              </button>
-            </div>
+          {preferredDate && preferredStart && preferredEnd && (
+            <SummaryRow
+              label="Preferred Date"
+              value={new Date(`${preferredDate}T00:00:00`).toLocaleDateString()}
+            />
+          )}
+          {preferredDate && preferredStart && preferredEnd && (
+            <SummaryRow label="Preferred Window" value={`${preferredStart} – ${preferredEnd} (PH time)`} />
           )}
         </div>
-      )}
+      </section>
+
+      <button
+        type="submit"
+        disabled={submitting}
+        className="w-full rounded-xl bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-60"
+      >
+        {submitting ? "Submitting..." : "Submit Repair Request"}
+      </button>
+    </form>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="mt-0.5 text-sm font-medium text-ink">{value}</p>
     </div>
   );
 }

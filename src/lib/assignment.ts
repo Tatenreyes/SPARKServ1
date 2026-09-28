@@ -1,157 +1,178 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, ServiceRequestRow } from "@/types/database";
+import type {
+  AssignmentOutcome,
+  Database,
+  ExpiredOffersOutcome,
+  OfferResponseOutcome,
+  ServiceRequestRow,
+  TechnicianQueueSnapshotRow,
+} from "@/types/database";
 import { notify } from "@/lib/notifications";
 
 /**
- * Fair technician assignment by ROTATION, not by rating/experience score.
+ * Fallback offer lifetime, in minutes. The authoritative value is the
+ * `queue_offer_ttl_minutes` row in `system_settings` (read by
+ * assign_technician_to_request); this constant is what a fresh install seeds
+ * that setting with and what the UI quotes.
+ */
+export const OFFER_TTL_MINUTES = 15;
+
+function applianceLabel(applianceType: string) {
+  return applianceType.replace(/_/g, " ");
+}
+
+/**
+ * QUEUE MODEL v2 — see QUEUE-SYSTEM.md.
  *
- * Each appliance type has its own implicit queue: every approved technician
- * qualified for that type has a position based on when they last ACCEPTED a
- * job of that type (technician_queue_state.last_assigned_at). Never-assigned
- * technicians (no row yet) are at the very front. A technician currently
- * doing an active job of that same appliance type is temporarily excluded —
- * they rejoin the queue, at the back, only once that job clears.
+ * The whole decision lives server-side in Postgres (transactional, race-safe),
+ * and everything in here is a thin, typed wrapper around it:
  *
- * This deliberately does NOT weight by rating, experience, or distance —
- * that's the whole point: a technician with zero reviews gets the same shot
- * as a five-star veteran, in turn.
+ *   assign_technician_to_request()  walks the queue: eligibility -> requested
+ *                                   time availability -> capacity. Skipped
+ *                                   technicians keep their position; the first
+ *                                   technician who can take it gets the offer.
+ *   respond_to_offer()              accept (consumes the turn, moves them to
+ *                                   the end) or decline (recorded, re-offered).
+ *   expire_stale_offers()           lapses ignored offers and re-offers them.
  *
- * Must be called with a service-role client — assignment is entirely
- * system-controlled, never a direct user action.
+ * What this deliberately does NOT do any more (that was the old bug): remove a
+ * technician from the rotation because they hold a *future* booking, or because
+ * they are busy right now, or keep queue order in React at all.
+ *
+ * These calls need the service-role client — they are revoked from anon /
+ * authenticated precisely so a client can never move itself in the queue.
+ */
+
+/**
+ * Runs the queue walk for a request and returns the request's new state.
+ * Keeps the original signature so existing callers are unaffected.
  */
 export async function assignTechnician(
   supabase: SupabaseClient<Database>,
   serviceRequest: ServiceRequestRow
 ): Promise<ServiceRequestRow> {
-  // 1. Who's already been offered/rejected THIS specific request — never re-offer them it.
-  const { data: history } = await supabase
-    .from("technician_offer_history")
-    .select("technician_id")
-    .eq("service_request_id", serviceRequest.id);
-  const excludedForThisRequest = new Set((history ?? []).map((h) => h.technician_id));
-
-  // 2. Every approved technician qualified for this appliance type.
-  const { data: technicians } = await supabase
-    .from("technicians")
-    .select("id, specializations, approved")
-    .eq("approved", true);
-  const technicianIds = (technicians ?? []).map((technician) => technician.id);
-  const { data: activeUsers } = technicianIds.length
-    ? await supabase.from("users").select("id").in("id", technicianIds).eq("is_active", true)
-    : { data: [] };
-  const activeTechnicianIds = new Set((activeUsers ?? []).map((user) => user.id));
-  const qualified = (technicians ?? []).filter(
-    (t) =>
-      activeTechnicianIds.has(t.id) &&
-      t.specializations.includes(serviceRequest.appliance_type) &&
-      !excludedForThisRequest.has(t.id)
-  );
-
-  if (!qualified.length) {
-    return finalize(supabase, serviceRequest.id, null, "waiting");
-  }
-
-  // 3. Exclude anyone currently doing ANY active job — a technician is
-  // temporarily unavailable for every appliance type while a job is active.
-  const qualifiedIds = qualified.map((t) => t.id);
-  const { data: activeBookings } = await supabase
-    .from("bookings")
-    .select("technician_id")
-    .in("technician_id", qualifiedIds)
-    .in("status", ["pending", "in_progress", "awaiting_inspection"]);
-
-  const busyTechnicianIds = new Set((activeBookings ?? []).map((b) => b.technician_id));
-
-  const eligible = qualified.filter((t) => !busyTechnicianIds.has(t.id));
-
-  if (!eligible.length) {
-    return finalize(supabase, serviceRequest.id, null, "waiting");
-  }
-
-  // 4. Order by queue position: last_assigned_at ascending, nulls (never
-  // assigned) first — that's genuinely the front of the queue.
-  const eligibleIds = eligible.map((t) => t.id);
-  const { data: queueRows } = await supabase
-    .from("technician_queue_state")
-    .select("technician_id, last_assigned_at")
-    .eq("appliance_type", serviceRequest.appliance_type)
-    .in("technician_id", eligibleIds);
-
-  const lastAssignedMap = new Map(
-    (queueRows ?? []).map((q) => [q.technician_id, q.last_assigned_at])
-  );
-
-  const sorted = [...eligible].sort((a, b) => {
-    const aTime = lastAssignedMap.get(a.id);
-    const bTime = lastAssignedMap.get(b.id);
-    if (!aTime && !bTime) return 0;
-    if (!aTime) return -1; // never assigned = front of queue
-    if (!bTime) return 1;
-    return new Date(aTime).getTime() - new Date(bTime).getTime();
+  const { data, error } = await supabase.rpc("assign_technician_to_request", {
+    p_request_id: serviceRequest.id,
   });
-
-  const next = sorted[0];
-
-  const updated = await finalize(supabase, serviceRequest.id, next.id, "offered");
-
-  await supabase
-    .from("technician_offer_history")
-    .insert({ service_request_id: serviceRequest.id, technician_id: next.id, status: "offered" });
-
-  await notify(supabase, {
-    userId: next.id,
-    type: "job_offered",
-    title: "New job offer",
-    body: `A ${serviceRequest.appliance_type.replace(/_/g, " ")} repair is available — respond to claim it.`,
-    link: "/technician/estimate-requests",
-  });
-
-  return updated;
-}
-
-async function finalize(
-  supabase: SupabaseClient<Database>,
-  requestId: string,
-  technicianId: string | null,
-  status: "offered" | "waiting"
-): Promise<ServiceRequestRow> {
-  const { data, error } = await supabase
-    .from("service_requests")
-    .update({ assigned_technician_id: technicianId, assignment_status: status })
-    .eq("id", requestId)
-    .select()
-    .single();
   if (error) throw error;
-  return data;
+
+  const outcome = data as unknown as AssignmentOutcome;
+
+  if (outcome?.outcome === "offered" && outcome.assigned_technician_id) {
+    await notify(supabase, {
+      userId: outcome.assigned_technician_id,
+      type: "job_offered",
+      title: "New job offer",
+      body: `A ${applianceLabel(serviceRequest.appliance_type)} repair is available — respond within ${OFFER_TTL_MINUTES} minutes to claim it.`,
+      link: "/technician/estimate-requests",
+    });
+  }
+
+  const { data: current, error: readError } = await supabase
+    .from("service_requests")
+    .select("*")
+    .eq("id", serviceRequest.id)
+    .single();
+  if (readError) throw readError;
+  return current;
+}
+/**
+ * Accept or decline the offer currently held by a technician.
+ *
+ * Accepting consumes that technician's queue turn for the appliance type
+ * (they move to the end of the rotation) — once, at acceptance, not when the
+ * job completes. Declining records the reason and immediately re-offers the
+ * request to the next eligible technician; whether a decline also costs the
+ * turn is governed by the `queue_decline_consumes_turn` setting (off by
+ * default: the rotation rewards work taken, not offers turned down).
+ */
+export async function respondToOffer(
+  supabase: SupabaseClient<Database>,
+  params: {
+    requestId: string;
+    technicianId: string;
+    action: "accept" | "decline";
+    reason?: string | null;
+  }
+): Promise<OfferResponseOutcome> {
+  const { data, error } = await supabase.rpc("respond_to_offer", {
+    p_request_id: params.requestId,
+    p_technician_id: params.technicianId,
+    p_action: params.action,
+    p_reason: params.reason ?? null,
+  });
+  if (error) throw error;
+  return data as unknown as OfferResponseOutcome;
 }
 
 /**
- * Called when a technician ACCEPTS an offer — this is the moment they're
- * sent to the back of their appliance-type queue (matching the spec: the
- * queue-ordering timestamp updates on acceptance, and the existing "currently
- * active" exclusion in assignTechnician already keeps them out of rotation
- * for the duration of the job — no separate "on completion" hook is needed).
+ * `true` when the configured decline policy costs the technician their queue
+ * turn. respondToOffer() already applies the rule; this exists so UI copy can
+ * tell technicians what declining will do.
+ */
+export async function declineConsumesTurn(supabase: SupabaseClient<Database>): Promise<boolean> {
+  const { data } = await supabase
+    .from("system_settings")
+    .select("value")
+    .eq("key", "queue_decline_consumes_turn")
+    .maybeSingle();
+  return String(data?.value ?? "false").toLowerCase() === "true";
+}
+
+/**
+ * Consumes a technician's queue turn without going through an offer. Only for
+ * administrative/manual assignment paths — the normal path consumes the turn
+ * inside respond_to_offer() when the technician accepts.
  */
 export async function markQueuePosition(
   supabase: SupabaseClient<Database>,
   technicianId: string,
-  applianceType: string
+  applianceType: string,
+  options: { requestId?: string | null; reason?: string | null } = {}
 ) {
-  await supabase.from("technician_queue_state").upsert(
-    {
-      technician_id: technicianId,
-      appliance_type: applianceType,
-      last_assigned_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "technician_id,appliance_type" }
-  );
+  const { data, error } = await supabase.rpc("consume_queue_turn", {
+    p_technician_id: technicianId,
+    p_appliance_type: applianceType,
+    p_request_id: options.requestId ?? null,
+    p_reason: options.reason ?? null,
+  });
+  if (error) throw error;
+  return data as number;
+}
+
+/** Recomputes and caches a technician's operational status. */
+export async function refreshOperationalStatus(
+  supabase: SupabaseClient<Database>,
+  technicianId: string
+) {
+  const { data, error } = await supabase.rpc("refresh_technician_operational_status", {
+    p_technician_id: technicianId,
+  });
+  if (error) throw error;
+  return data as string;
 }
 
 /**
- * Re-runs assignment for every request currently stuck "waiting" — call
- * this after a technician is newly approved or their specializations
- * change, since a previously-unmatchable request might now have a fit.
+ * The full queue for one appliance type (or every queue the caller belongs to
+ * when `applianceType` is null). Must be called with a client that carries the
+ * technician's/admin's JWT — the function refuses customers and anonymous
+ * callers, and returns only non-sensitive fields.
+ */
+export async function getTechnicianQueue(
+  supabase: SupabaseClient<Database>,
+  applianceType: string | null = null
+): Promise<TechnicianQueueSnapshotRow[]> {
+  const { data, error } = await supabase.rpc("technician_queue_snapshot", {
+    p_appliance_type: applianceType,
+  });
+  if (error) throw error;
+  return (data ?? []) as unknown as TechnicianQueueSnapshotRow[];
+}
+
+/**
+ * Re-runs assignment for every request currently stuck "waiting" — call this
+ * after a technician is newly approved or their specializations change, since a
+ * previously-unmatchable request might now have a fit.
  */
 export async function rematchWaitingRequests(supabase: SupabaseClient<Database>) {
   const { data: waiting } = await supabase
@@ -162,4 +183,54 @@ export async function rematchWaitingRequests(supabase: SupabaseClient<Database>)
   for (const request of waiting ?? []) {
     await assignTechnician(supabase, request);
   }
+}
+
+/**
+ * Lapses every offer whose TTL has run out and immediately re-offers the
+ * request to the next technician in the queue. This is what stops a request
+ * from being stranded in "offered" forever when a technician ignores the
+ * notification, and it leaves the ignoring technician's queue position alone.
+ *
+ * Driven by /api/cron/assignment-tick (see vercel.json — every 5 minutes).
+ */
+export async function expireStaleOffers(
+  supabase: SupabaseClient<Database>
+): Promise<ExpiredOffersOutcome> {
+  const { data, error } = await supabase.rpc("expire_stale_offers");
+  if (error) throw error;
+
+  const outcome = (data ?? { count: 0, expired: [] }) as unknown as ExpiredOffersOutcome;
+
+  for (const lapsed of outcome.expired ?? []) {
+    if (!lapsed.technician_id) continue;
+    await notify(supabase, {
+      userId: lapsed.technician_id,
+      type: "offer_expired",
+      title: "Job offer expired",
+      body: `Your offer for a ${applianceLabel(lapsed.appliance_type)} repair lapsed and was passed to the next technician.`,
+      link: "/technician/estimate-requests",
+    });
+  }
+
+  return outcome;
+}
+
+/**
+ * Does this appointment slot clash with the technician's real schedule
+ * (existing appointments or time off)? Used when a customer books a slot, so a
+ * conflicting time is refused with a clear message instead of being stored.
+ */
+export async function hasScheduleConflict(
+  supabase: SupabaseClient<Database>,
+  technicianId: string,
+  start: string,
+  end: string
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc("technician_schedule_conflict", {
+    p_technician_id: technicianId,
+    p_start: start,
+    p_end: end,
+  });
+  if (error) throw error;
+  return Boolean(data);
 }

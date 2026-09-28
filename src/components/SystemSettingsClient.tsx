@@ -38,7 +38,7 @@ export default function SystemSettingsClient({
 
   return (
     <div className="mt-6 max-w-lg space-y-6">
-      <div className="rounded-card border border-ink/8 bg-white p-5 shadow-card">
+      <div className="rounded-card border border-ink/8 bg-surface p-5 shadow-card">
         <div className="flex items-center justify-between">
           <div>
             <p className="font-medium text-ink">Maintenance mode</p>
@@ -54,7 +54,7 @@ export default function SystemSettingsClient({
             }`}
           >
             <span
-              className={`block h-5 w-5 translate-y-0.5 rounded-full bg-white transition ${
+              className={`block h-5 w-5 translate-y-0.5 rounded-full bg-surface transition ${
                 maintenanceMode ? "translate-x-5" : "translate-x-0.5"
               }`}
             />
@@ -62,7 +62,7 @@ export default function SystemSettingsClient({
         </div>
       </div>
 
-      <div className="rounded-card border border-ink/8 bg-white p-5 shadow-card">
+      <div className="rounded-card border border-ink/8 bg-surface p-5 shadow-card">
         <p className="font-medium text-ink">Platform announcement</p>
         <p className="text-xs text-ink/50">
           Shown as a banner on the customer dashboard. Leave blank to hide it.

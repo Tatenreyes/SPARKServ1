@@ -50,7 +50,7 @@ export default function TechnicianJobsClient({
             {completed.map((b) => {
               const r = requestMap.get(b.service_request_id);
               return (
-                <div key={b.id} className="rounded-card border border-ink/8 bg-white p-4 shadow-card">
+                <div key={b.id} className="rounded-card border border-ink/8 bg-surface p-4 shadow-card">
                   <div className="flex items-center justify-between">
                     <p className="font-medium capitalize text-ink">
                       {r?.appliance_type.replace("_", " ") ?? "Job"}
@@ -112,7 +112,7 @@ function JobCard({
   }
 
   return (
-    <div className="rounded-card border border-ink/8 bg-white p-4 shadow-card">
+    <div className="rounded-card border border-ink/8 bg-surface p-4 shadow-card">
       <div className="flex items-start justify-between">
         <div>
           <p className="font-medium capitalize text-ink">
@@ -155,7 +155,7 @@ function JobCard({
           </p>
           <button
             onClick={() => setShowAddVisit((s) => !s)}
-            className="flex items-center gap-1 text-xs font-semibold text-brand-500 hover:text-brand-600"
+            className="flex items-center gap-1 text-xs font-semibold text-brand-ink hover:text-brand-ink"
           >
             <Plus className="h-3.5 w-3.5" /> Add visit
           </button>

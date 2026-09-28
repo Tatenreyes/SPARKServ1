@@ -2,8 +2,8 @@
 
 A web-based appliance repair management system connecting **customers**,
 **technicians**, **admins**, and a **super admin** on one platform — with a
-rule-based troubleshooting chatbot and a configurable technician
-recommendation engine.
+rule-based troubleshooting chatbot and a fair, rotation-based technician queue
+that assigns work without ranking anyone.
 
 Built with **Next.js 14 (App Router, TypeScript)**, **Supabase**
 (Postgres + Auth + Realtime), and **Tailwind CSS**. Deploy-ready for **Vercel**.
@@ -27,7 +27,7 @@ sparkserv/
 │   ├── components/                       # reusable UI (forms, cards, chat, etc.)
 │   ├── lib/
 │   │   ├── supabase/ (client.ts, server.ts, middleware.ts)
-│   │   ├── recommendation.ts             # scoring engine — see section 4
+│   │   ├── queue.ts / assignment.ts / service-time.ts   # queue reads, RPC wrappers, time windows
 │   │   ├── chatbot-rules.ts              # rule-based troubleshooting
 │   │   └── auth.ts                       # server-side role guards
 │   ├── hooks/                            # useUser, useRealtimeMessages
@@ -85,6 +85,65 @@ Visit `http://localhost:3000`.
 6. **Realtime** is enabled by default for the `messages` table via the
    schema above — no extra step needed for the in-app chat to work live.
 
+### Upgrading an existing database
+
+`supabase/schema.sql` is the canonical single-file install — a fresh project
+only ever needs that one file. If your database was created from an *earlier*
+`schema.sql`, apply the migration files instead, **in this order**:
+
+```
+1. migration_fix_technician_signup.sql
+2. migration_appliances_tickets.sql
+3. migration_visits_payments.sql
+4. migration_system_settings.sql
+5. migration_profile_photos.sql
+6. migration_profile_name_address.sql
+7. migration_security_hardening.sql
+8. migration_notifications.sql
+9. migration_technician_queue.sql
+10. migration_appliance_centric_flow.sql   # guarded — skips if already applied
+11. migration_sync_live_schema.sql         # appliance-centric columns; MUST precede 13
+12. migration_flow_hardening.sql           # offer expiry, integrity indexes
+13. migration_queue_redesign.sql           # queue model v2 — REQUIRES 11 and 12
+```
+
+Every file is written to be safe to re-run. Two ordering constraints are real,
+not stylistic:
+
+* **11 → 12 → 13.** `migration_queue_redesign.sql` opens with a preflight block
+  that inspects `information_schema` and raises an explicit exception naming the
+  prerequisites if `service_requests.problem_description` or
+  `service_requests.offers_expires_at` are missing. It refuses to half-apply
+  rather than failing partway with a confusing `42703`.
+* **13 last.** It is the one that reinterprets queue behaviour; running it
+  against an unprepared schema gets the exception above.
+
+**Then check what the database actually has — don't infer it:**
+
+```bash
+npm run db:check     # read-only; reports every migration as applied or pending
+```
+
+This is worth running before anything else when the app misbehaves. A missing
+column reaches the browser as a blanket HTTP 500 with the real Postgres error
+only in the server log, so "500 on the request form" and "forgot migration 11"
+look identical from the outside. `db:check` prints the difference, and exits
+non-zero when anything is pending. It detects functions from PostgREST's OpenAPI
+document rather than calling them, because probing `expire_stale_offers()` by
+invocation would lapse real offers.
+
+After applying migrations, **reload the Postgres schema cache** in the dashboard
+(Settings → API → Reload schema) so PostgREST exposes the new columns and RPCs.
+
+> ⚠️ Do **not** re-run `migration_appliance_centric_flow.sql` on a current
+> database. It is guarded now, but its job was to rebuild `service_requests`
+> on an older schema — a full re-run on current data is both unnecessary and
+> destructive.
+
+Also set `CRON_SECRET` in your environment (see `.env.example`). Without it,
+`/api/cron/assignment-tick` refuses to run in production, and ignored job
+offers will never lapse.
+
 ### Creating your first admin / super admin
 There's no UI for this by design (nobody should be able to self-promote).
 After registering a normal account through `/register`, open **Table Editor
@@ -96,32 +155,70 @@ everyone else from `/superadmin/dashboard`.
 Register an account choosing "Technician" — this creates a row in both
 `users` and `technicians` automatically via the signup trigger. It starts
 `approved = false`, so log in as an admin, visit `/admin/technicians`, and
-approve it. You'll likely also want to set `latitude`/`longitude` on that
-technician's `users` row and some `specializations` on their `technicians`
-row directly in the Table Editor so the recommendation engine has real
-distance and specialization data to score against.
+approve it. Then give them a **service area** and at least one
+**specialisation** — membership in a queue comes from
+`technicians.specializations`, so a technician whose array does not contain the
+request's appliance type is never in that queue and will never be offered that
+kind of job. Add working-hours rows in `technician_availability` if you want
+them offerable for requests that carry a time window.
 
 ---
 
-## 4. The recommendation engine
+## 4. The assignment engine
 
-Lives in `src/lib/recommendation.ts`. The formula:
+Every technician who is verified, active and specialised in an appliance type
+belongs to **one rotation queue per appliance type**. Position is a stored
+membership position that advances only when a technician **accepts** work: they
+go to the end of that appliance's queue, and everyone else moves up one.
+Customers **never browse, rank or pick a technician** — the system works down the
+rotation and offers the job to the first member who is actually eligible and
+free for the requested time.
 
-```
-Score = (Weight_rating × rating)
-      + (Weight_experience × min(experience, cap))
-      + (Weight_availability × isAvailable)
-      + (Weight_distance × (1 / distance_km))
-      + NewTechBoost (flat, if is_new)
-      + StarvationBoost (scales down as active_job_load rises)
-```
+The queue is membership and order (fairness). A technician's schedule and
+workload are a separate per-request decision (availability), evaluated at match
+time — and because the preferred time is a real window, a technician with a
+booking on Jan 30 is still offered Jan 24 work instead of disappearing until the
+first repair finishes.
 
-All weights are named constants in `RECOMMENDATION_WEIGHTS` at the top of
-that file — change the numbers, not the logic, to retune matching. It's
-called from `POST /api/recommend`, which pulls every **approved**
-technician, filters to specialization matches when available (falling back
-to the full pool if nobody matches exactly), scores each one, and returns
-them sorted best-first with a full score breakdown for transparency.
+Assignment therefore never weights by rating, experience or distance — a
+technician with zero reviews gets the same shot as a five-star veteran, in turn.
+
+All of it runs inside Postgres (`SECURITY DEFINER` RPCs), so two technicians
+answering the same offer cannot both win:
+
+| RPC | What it does |
+|---|---|
+| `technician_queue_snapshot(appliance_type)` | the rotation + operational status + next bookings — the only queue read |
+| `assign_technician_to_request(id)` | walks the queue in position order, creates one offer, logs every skip and why |
+| `respond_to_offer(id, accept, reason)` | accept rotates exactly once; decline passes to the next candidate |
+| `expire_stale_offers()` | lapses ignored offers and re-walks the queue |
+| `admin_queue_override(...)` | reason-required, audited admin corrections |
+| `refresh_technician_operational_status()` | derives status from real bookings |
+
+Client code cannot write queue positions: `EXECUTE` is revoked for
+`authenticated`/`anon` on every mutating function, and RLS blocks direct writes.
+
+Tunables live in `system_settings` (no redeploys), editable through
+`GET|PATCH /api/settings` by an admin or super admin:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `queue_offer_ttl_minutes` | `15` | How long a technician has to answer before the offer lapses and the queue moves on |
+| `queue_decline_consumes_turn` | `false` | Whether declining costs queue position. Off — the rotation rewards work taken, not offers declined |
+| `queue_service_timezone` | `Asia/Manila` | How a preferred date/time is turned into a UTC window |
+| `queue_model_version` | `2.0` | Marker so a half-migrated database is recognisable |
+
+Capacity is not a global switch: each technician row carries
+`max_daily_hours`, `max_concurrent_jobs` (default 2) and `max_jobs_per_day`, and
+those are what the per-request capacity check reads.
+
+**Offer expiry is what keeps requests from stalling.** An ignored offer would
+otherwise sit in `offered` forever with the customer waiting and nobody else
+ever getting a shot at the job. `/api/cron/assignment-tick`, scheduled every
+5 minutes via `vercel.json` and protected by `CRON_SECRET`, runs
+`expire_stale_offers()`, re-walks `waiting` requests and refreshes operational
+status. It is also invoked right after a technician accepts or declines, so the
+common path does not wait for the next tick.
 
 ---
 

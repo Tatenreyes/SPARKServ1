@@ -84,10 +84,10 @@ export default async function SuperAdminActivityPage() {
           items.slice(0, 30).map((item) => (
             <div
               key={item.id}
-              className="flex items-center justify-between rounded-card border border-ink/8 bg-white p-3 shadow-card"
+              className="flex items-center justify-between rounded-card border border-ink/8 bg-surface p-3 shadow-card"
             >
               <div>
-                <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-600">
+                <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-ink">
                   {item.type}
                 </span>
                 <p className="mt-1 text-sm text-ink">{item.description}</p>

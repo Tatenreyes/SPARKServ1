@@ -129,7 +129,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink/30 transition-all duration-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink/30 transition-all duration-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                 placeholder="Juan Dela Cruz"
               />
             </div>
@@ -146,7 +146,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink/30 transition-all duration-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+              className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink/30 transition-all duration-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
               placeholder="you@example.com"
             />
           </div>
@@ -164,7 +164,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-ink/10 bg-white px-3.5 py-2.5 pr-10 text-sm text-ink placeholder:text-ink/30 transition-all duration-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+                className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 pr-10 text-sm text-ink placeholder:text-ink/30 transition-all duration-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                 placeholder="••••••••"
               />
               <button
@@ -190,8 +190,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
                   onClick={() => setRole("customer")}
                   className={`flex flex-col items-center justify-center gap-2.5 rounded-xl border-2 p-4 transition-all duration-200 ${
                     role === "customer"
-                      ? "border-brand-500 bg-brand-50 shadow-sm"
-                      : "border-ink/10 bg-white hover:border-ink/20"
+                      ? "border-brand-500 bg-brand-soft shadow-sm"
+                      : "border-ink/10 bg-surface hover:border-ink/20"
                   }`}
                 >
                   <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
@@ -212,8 +212,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
                   onClick={() => setRole("technician")}
                   className={`flex flex-col items-center justify-center gap-2.5 rounded-xl border-2 p-4 transition-all duration-200 ${
                     role === "technician"
-                      ? "border-brand-500 bg-brand-50 shadow-sm"
-                      : "border-ink/10 bg-white hover:border-ink/20"
+                      ? "border-brand-500 bg-brand-soft shadow-sm"
+                      : "border-ink/10 bg-surface hover:border-ink/20"
                   }`}
                 >
                   <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
@@ -230,20 +230,20 @@ export default function AuthForm({ mode }: AuthFormProps) {
                 </button>
               </div>
               {role === "technician" && (
-                <div className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                <div className="flex items-start gap-2 rounded-lg bg-warn-soft px-3 py-2.5 text-xs text-warn-ink">
                   <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <line x1="12" y1="8" x2="12" y2="12" />
                     <line x1="12" y1="16" x2="12.01" y2="16" />
                   </svg>
-                  <span>Technician accounts require admin approval before appearing in recommendations.</span>
+                  <span>Technician accounts require admin approval before they can receive work from the queue.</span>
                 </div>
               )}
             </div>
           )}
 
           {mode === "register" && (
-            <div className="space-y-3 rounded-xl border border-ink/8 bg-white p-4">
+            <div className="space-y-3 rounded-xl border border-ink/8 bg-surface p-4">
               <label className="flex items-start gap-3 cursor-pointer group">
                 <div className="relative mt-0.5">
                   <input
@@ -261,7 +261,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                   <Link
                     href={role === "technician" ? "/policies/technician" : "/policies/customer"}
                     target="_blank"
-                    className="font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-2"
+                    className="font-semibold text-brand-ink hover:text-brand-ink underline underline-offset-2"
                   >
                     {role === "technician" ? "Technician Policies" : "Customer Policies"}
                   </Link>
@@ -284,7 +284,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                   <Link
                     href="/policies/customer"
                     target="_blank"
-                    className="font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-2"
+                    className="font-semibold text-brand-ink hover:text-brand-ink underline underline-offset-2"
                   >
                     Privacy Policy
                   </Link>
@@ -294,7 +294,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           )}
 
           {error && (
-            <div className="flex items-start gap-2.5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="flex items-start gap-2.5 rounded-xl bg-alert-soft px-4 py-3 text-sm text-alert-ink">
               <svg className="h-4.5 w-4.5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
@@ -329,14 +329,14 @@ export default function AuthForm({ mode }: AuthFormProps) {
           {mode === "login" ? (
             <>
               Don&apos;t have an account?{" "}
-              <Link href="/register" className="font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-2 transition-colors">
+              <Link href="/register" className="font-semibold text-brand-ink hover:text-brand-ink underline underline-offset-2 transition-colors">
                 Sign up
               </Link>
             </>
           ) : (
             <>
               Already have an account?{" "}
-              <Link href="/login" className="font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-2 transition-colors">
+              <Link href="/login" className="font-semibold text-brand-ink hover:text-brand-ink underline underline-offset-2 transition-colors">
                 Log in
               </Link>
             </>

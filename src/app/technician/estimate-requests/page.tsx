@@ -1,13 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
+import { getServiceTimezone, formatRequestedWindow } from "@/lib/service-time";
 import StatusBadge from "@/components/StatusBadge";
 import EstimateForm from "@/components/EstimateForm";
 import OfferResponseControl from "@/components/OfferResponseControl";
-import { Clock, Send, CheckCircle2, Wallet } from "lucide-react";
+import { Clock, Send, CheckCircle2, Wallet, CalendarClock } from "lucide-react";
 
 export default async function PendingAssignmentsPage() {
   const user = await getCurrentUser();
   const supabase = createClient();
+  const serviceTimeZone = await getServiceTimezone(supabase);
 
   // Requests SPARKServ's rotation queue has offered specifically to this
   // technician, awaiting their accept/reject. Technicians no longer browse
@@ -63,7 +65,7 @@ export default async function PendingAssignmentsPage() {
         ) : (
           <div className="space-y-3">
             {offeredRequests.map((r) => (
-              <div key={r.id} className="rounded-card border border-ink/8 bg-white p-4 shadow-card">
+              <div key={r.id} className="rounded-card border border-ink/8 bg-surface p-4 shadow-card">
                 <div className="flex items-center justify-between">
                   <p className="font-medium capitalize text-ink">
                     {r.appliance_type.replace("_", " ")}
@@ -71,6 +73,11 @@ export default async function PendingAssignmentsPage() {
                   <StatusBadge status={r.status} />
                 </div>
                 <p className="mt-1 text-sm text-ink/65">{r.problem_description}</p>
+                <RequestedWindow
+                  start={r.requested_window_start}
+                  end={r.requested_window_end}
+                  timeZone={serviceTimeZone}
+                />
                 <p className="mt-1 text-xs text-ink/35">{r.location}</p>
                 <OfferResponseControl requestId={r.id} />
               </div>
@@ -86,7 +93,7 @@ export default async function PendingAssignmentsPage() {
           </h2>
           <div className="space-y-3">
             {awaitingEstimate.map((r) => (
-              <div key={r.id} className="rounded-card border border-ink/8 bg-white p-4 shadow-card">
+              <div key={r.id} className="rounded-card border border-ink/8 bg-surface p-4 shadow-card">
                 <div className="flex items-center justify-between">
                   <p className="font-medium capitalize text-ink">
                     {r.appliance_type.replace("_", " ")}
@@ -94,6 +101,11 @@ export default async function PendingAssignmentsPage() {
                   <StatusBadge status={r.status} />
                 </div>
                 <p className="mt-1 text-sm text-ink/65">{r.problem_description}</p>
+                <RequestedWindow
+                  start={r.requested_window_start}
+                  end={r.requested_window_end}
+                  timeZone={serviceTimeZone}
+                />
                 <p className="mt-1 text-xs text-ink/35">{r.location}</p>
                 <EstimateForm serviceRequestId={r.id} />
               </div>
@@ -102,6 +114,30 @@ export default async function PendingAssignmentsPage() {
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * The window the customer asked for, shown on both the offer and the accepted
+ * card. When they gave no time preference it says so explicitly — a technician
+ * should not have to guess whether "no time shown" means "all day" or "nobody
+ * asked", because the queue treated those two cases very differently.
+ */
+function RequestedWindow({
+  start,
+  end,
+  timeZone,
+}: {
+  start: string | null;
+  end: string | null;
+  timeZone: string;
+}) {
+  const label = formatRequestedWindow(start, end, timeZone);
+  return (
+    <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-ink/70">
+      <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+      {label ? <span>Wants {label} (PH time)</span> : <span>No time preference stated — agree a slot</span>}
+    </p>
   );
 }
 
@@ -115,7 +151,7 @@ function StatCard({
   value: string;
 }) {
   return (
-    <div className="rounded-card border border-ink/8 bg-white p-3 shadow-card">
+    <div className="rounded-card border border-ink/8 bg-surface p-3 shadow-card">
       <div className="flex items-center gap-1.5 text-ink/40">
         {icon}
         <span className="text-xs">{label}</span>

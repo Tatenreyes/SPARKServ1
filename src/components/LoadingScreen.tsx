@@ -19,7 +19,7 @@ export default function LoadingScreen({ message = "Please wait..." }: LoadingScr
             transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
           />
           <motion.div
-            className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-spark-400 text-brand-900 shadow-lg"
+            className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-spark-400 text-navy-900 shadow-lg"
             animate={{ scale: [1, 1.04, 1] }}
             transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
           >

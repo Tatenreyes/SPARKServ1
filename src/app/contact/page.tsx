@@ -4,7 +4,7 @@ import Footer from "@/components/Footer";
 
 export default function ContactPage() {
   return (
-    <main className="bg-[#F6F9FC]">
+    <main className="bg-canvas">
       <section className="bg-[#082653] px-4 py-16 text-white md:py-24">
         <div className="mx-auto max-w-5xl">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#87C5FF]">Contact SPARKServ</p>
@@ -24,6 +24,6 @@ export default function ContactPage() {
 }
 
 function ContactCard({ icon: Icon, label, value, href }: { icon: typeof Phone; label: string; value: string; href?: string }) {
-  const content = <><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF4FF] text-[#0F52BA]"><Icon className="h-5 w-5" /></span><span><small className="block text-xs font-semibold uppercase tracking-wide text-[#66758C]">{label}</small><strong className="mt-1 block text-sm text-[#061B3B]">{value}</strong></span></>;
-  return href ? <a href={href} className="flex items-center gap-4 rounded-xl border border-[#DDEBFA] bg-white p-5 shadow-sm transition hover:-translate-y-1">{content}</a> : <div className="flex items-center gap-4 rounded-xl border border-[#DDEBFA] bg-white p-5 shadow-sm">{content}</div>;
+  const content = <><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-soft text-brand-ink"><Icon className="h-5 w-5" /></span><span><small className="block text-xs font-semibold uppercase tracking-wide text-muted">{label}</small><strong className="mt-1 block text-sm text-ink">{value}</strong></span></>;
+  return href ? <a href={href} className="flex items-center gap-4 rounded-xl border border-line bg-surface p-5 shadow-sm transition hover:-translate-y-1">{content}</a> : <div className="flex items-center gap-4 rounded-xl border border-line bg-surface p-5 shadow-sm">{content}</div>;
 }

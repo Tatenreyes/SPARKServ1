@@ -47,18 +47,64 @@ create table public.technicians (
 );
 
 -- =========================================================
--- service_requests — customer's initial appliance issue submission
+-- appliances — a customer's registered appliances. service_requests.appliance_id
+-- points here, so this table must exist first.
+-- =========================================================
+create table public.appliances (
+  id uuid primary key default uuid_generate_v4(),
+  customer_id uuid not null references public.users(id) on delete cascade,
+  name text not null,
+  appliance_type text not null,
+  brand text,
+  model text,
+  model_number text,
+  serial_number text,
+  purchase_date date,
+  warranty_status text not null default 'unknown'
+    check (warranty_status in ('yes', 'no', 'unknown')),
+  warranty_type text,
+  warranty_expiry_date date,
+  warranty_proof_url text,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.appliances enable row level security;
+
+create policy "customer manages own appliances"
+  on public.appliances for all
+  using (customer_id = auth.uid() or public.is_admin())
+  with check (customer_id = auth.uid() or public.is_admin());
+
+create index idx_appliances_customer on public.appliances(customer_id);
+
+-- =========================================================
+-- service_requests — customer's initial appliance issue submission.
+-- Appliance-centric: the request points at a row in appliances rather than
+-- carrying free-text appliance fields, and carries the queue-assignment
+-- columns the rotation engine (src/lib/assignment.ts) writes to.
 -- =========================================================
 create table public.service_requests (
   id uuid primary key default uuid_generate_v4(),
   customer_id uuid not null references public.users(id) on delete cascade,
+  appliance_id uuid references public.appliances(id) on delete set null,
   appliance_type text not null,
-  issue_description text not null,
-  location text not null,
-  latitude double precision,
-  longitude double precision,
+  issue_category text,
+  problem_description text not null,
+  photos text[] not null default '{}',
+  service_type text not null default 'repair',
   status request_status not null default 'open',
   chatbot_resolved boolean not null default false,
+  location text,
+  latitude double precision,
+  longitude double precision,
+  -- Fair-rotation assignment (see migration_technician_queue.sql)
+  assigned_technician_id uuid references public.users(id),
+  assignment_status text not null default 'matching'
+    check (assignment_status in ('matching', 'offered', 'accepted', 'waiting')),
+  -- When the current offer lapses. Set by the assignment engine; powers
+  -- /api/cron/assignment-tick so an ignored offer can't strand a request.
+  offers_expires_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -88,6 +134,10 @@ create table public.bookings (
   scheduled_at timestamptz not null,
   status booking_status not null default 'pending',
   final_cost numeric(10, 2),
+  -- Set when the customer signs off that the repair actually works. Closing a
+  -- job is the customer's attestation, so it carries their note as evidence.
+  inspection_confirmed_at timestamptz,
+  inspection_note text,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -206,6 +256,37 @@ as $$
   select public.current_role() in ('admin', 'super_admin');
 $$;
 
+-- Helper: is the caller a technician? Used by the queue RLS policies, which
+-- must let technicians read a whole appliance queue but must NOT let customers
+-- read it. (migration_queue_redesign.sql recreates this identically.)
+create or replace function public.is_technician()
+returns boolean
+language sql stable
+security definer set search_path = public
+as $$
+  select public.current_role() = 'technician';
+$$;
+
+-- Helper: does the calling technician have a link (an estimate or a booking)
+-- to this request? Declared SECURITY DEFINER so it bypasses RLS internally.
+-- Referencing estimates/bookings *directly* inside a service_requests policy
+-- causes "infinite recursion detected in policy for relation service_requests"
+-- in production, because those tables' own policies query service_requests
+-- back. Funnelling it through this function breaks the cycle.
+create or replace function public.technician_linked_to_request(request_id uuid)
+returns boolean
+language sql stable
+security definer set search_path = public
+as $$
+  select exists (
+    select 1 from estimates e
+    where e.service_request_id = request_id and e.technician_id = auth.uid()
+  ) or exists (
+    select 1 from bookings b
+    where b.service_request_id = request_id and b.technician_id = auth.uid()
+  );
+$$;
+
 -- ---------- users ----------
 create policy "users can view their own profile"
   on public.users for select
@@ -221,8 +302,15 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
+  -- `request.jwt.claims` is a JSON object in current Supabase; the older
+  -- singular `request.jwt.claim.role` setting no longer holds the caller's
+  -- role, which meant the service-role bypass silently never fired.
   if new.role is distinct from old.role
-    and coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role'
+    and coalesce(
+          current_setting('request.jwt.claims', true)::jsonb ->> 'role',
+          current_setting('request.jwt.claim.role', true),
+          ''
+        ) <> 'service_role'
     and not public.is_admin() then
     raise exception 'Only an administrator can change user roles';
   end if;
@@ -265,15 +353,8 @@ create policy "customer manages own service requests"
 create policy "technicians can view open/assigned requests"
   on public.service_requests for select
   using (
-    status = 'open'
-    or exists (
-      select 1 from public.estimates e
-      where e.service_request_id = service_requests.id and e.technician_id = auth.uid()
-    )
-    or exists (
-      select 1 from public.bookings b
-      where b.service_request_id = service_requests.id and b.technician_id = auth.uid()
-    )
+    assigned_technician_id = auth.uid()
+    or public.technician_linked_to_request(id)
   );
 
 -- ---------- estimates ----------
@@ -353,27 +434,6 @@ create policy "system inserts service history"
 -- =========================================================
 
 create type ticket_status as enum ('open', 'in_progress', 'resolved', 'closed');
-
-create table public.appliances (
-  id uuid primary key default uuid_generate_v4(),
-  customer_id uuid not null references public.users(id) on delete cascade,
-  name text not null,
-  appliance_type text not null,
-  brand text,
-  model text,
-  purchase_date date,
-  notes text,
-  created_at timestamptz not null default now()
-);
-
-alter table public.appliances enable row level security;
-
-create policy "customer manages own appliances"
-  on public.appliances for all
-  using (customer_id = auth.uid() or public.is_admin())
-  with check (customer_id = auth.uid() or public.is_admin());
-
-create index idx_appliances_customer on public.appliances(customer_id);
 
 create table public.support_tickets (
   id uuid primary key default uuid_generate_v4(),
@@ -537,57 +597,68 @@ create policy "users can update their own profile"
   with check (id = auth.uid() or public.is_admin());
 
 -- =========================================================
--- RLS recursion fix (applied live in Supabase previously, never
--- captured in this file). The original "technicians can view
--- open/assigned requests" policy does raw cross-table subqueries
--- directly in USING, which caused "infinite recursion detected in
--- policy for relation service_requests" in production. This replaces
--- it with a SECURITY DEFINER function, which bypasses RLS internally
--- and breaks the recursion cycle.
+-- NOTE: the "RLS recursion fix" that used to live here is gone — the
+-- technician_linked_to_request() helper is now defined up beside
+-- current_role()/is_admin(), and the service_requests technician policy
+-- uses it from the start. Previously this file created the recursion-prone
+-- policy first and then dropped it ~300 lines later, which meant the
+-- dangerous version existed for part of the script.
 -- =========================================================
 
-create or replace function public.technician_linked_to_request(request_id uuid)
-returns boolean
-language sql
-stable
-security definer set search_path = public
-as $$
-  select exists (
-    select 1 from estimates e
-    where e.service_request_id = request_id and e.technician_id = auth.uid()
-  ) or exists (
-    select 1 from bookings b
-    where b.service_request_id = request_id and b.technician_id = auth.uid()
-  );
-$$;
-
-drop policy if exists "technicians can view open/assigned requests" on public.service_requests;
-
 -- =========================================================
--- Added after initial release (see migration_technician_queue.sql) —
--- fair ROTATION-based technician queue per appliance type (not a
--- rating/experience score — see file comments for the exact model).
+-- Technician queue — fair rotation per appliance type (QUEUE-SYSTEM.md).
+--
+-- REQUIRED: apply supabase/migration_queue_redesign.sql after this file. The
+-- queue FUNCTIONS (assign_technician_to_request, respond_to_offer, ...) are the
+-- only writers of queue position and they live in that migration, so this file
+-- only defines the storage. Ratings, reviews and experience play NO part in
+-- ordering — the queue is a fairness mechanism, not a ranking.
+--
+-- Four independent concepts, never collapsed into one busy/free flag:
+--   queue position  -> technician_queue_state.queue_position (fairness)
+--   eligibility     -> profiles + specializations + service areas (qualification)
+--   availability    -> technician_availability / technician_time_off (working hours)
+--   schedule        -> bookings (actual appointments)
+--   capacity        -> profiles.max_daily_working_hours (workload limit)
 -- =========================================================
 
-alter table public.service_requests
-  add column if not exists assigned_technician_id uuid references public.users(id),
-  add column if not exists assignment_status text not null default 'matching'
-    check (assignment_status in ('matching', 'offered', 'accepted', 'waiting'));
+-- NOTE: assigned_technician_id / assignment_status / offers_expires_at are
+-- declared directly on service_requests in the table definition above, so no
+-- ALTER is needed here (it used to be, back when the table was recreated by
+-- migration_appliance_centric_flow.sql).
 
+-- Queue membership: one row per (technician, appliance type). The primary key
+-- makes duplicate memberships impossible, and a technician legitimately appears
+-- in several queues (Refrigerator #1, Washing Machine #3, ...).
+-- `last_assigned_at` records whose turn was last consumed — the rotation rule —
+-- while `queue_position` is the inspectable 1..N rank shown to technicians.
 create table public.technician_queue_state (
   technician_id uuid not null references public.users(id),
   appliance_type text not null,
   last_assigned_at timestamptz,
+  id uuid,
+  queue_position integer,
+  is_active boolean not null default true,
+  turn_count integer not null default 0,
+  joined_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (technician_id, appliance_type)
 );
 
 alter table public.technician_queue_state enable row level security;
 
-create policy "technician views own queue position"
+-- Technicians read the WHOLE queue for an appliance type, not just their own
+-- row — that is what lets them see "#2 You" instead of an empty list. The row
+-- holds no private data (technician id, appliance type, position, timestamps).
+-- The old policy here was `technician_id = auth.uid() or is_admin()`, which is
+-- exactly why a technician used to see only themselves.
+create policy "technician and admin view queue positions"
   on public.technician_queue_state for select
-  using (technician_id = auth.uid() or public.is_admin());
+  using (public.is_technician() or public.is_admin());
 
+-- Writes stay admin-only; the rotation itself happens inside SECURITY DEFINER
+-- functions that run as the owner, so a client can never rewrite its own
+-- position even with a valid login.
 create policy "admin manages queue state"
   on public.technician_queue_state for all
   using (public.is_admin())
@@ -618,11 +689,9 @@ create index idx_offer_history_technician on public.technician_offer_history(tec
 create index idx_service_requests_assignment_status on public.service_requests(assignment_status);
 create index idx_queue_state_appliance on public.technician_queue_state(appliance_type, last_assigned_at);
 
-create policy "technicians can view open/assigned requests"
-  on public.service_requests for select
-  using (
-    assigned_technician_id = auth.uid() or public.technician_linked_to_request(id)
-  );
+-- The "technicians can view open/assigned requests" policy is NOT redefined
+-- here — it's created once, up in the service_requests block. This block used
+-- to recreate it, which made a fresh install fail with "policy already exists".
 
 alter type booking_status add value if not exists 'awaiting_inspection';
 -- Run this in the Supabase SQL Editor. Adds in-app notifications (bell icon,
@@ -678,4 +747,41 @@ create policy "user manages own push subscriptions"
   with check (user_id = auth.uid() or public.is_admin());
 
 create index idx_push_subscriptions_user on public.push_subscriptions(user_id);
+
+-- =========================================================
+-- Added after initial release (see migration_flow_hardening.sql) —
+-- keeps the assignment flow from stranding requests. Included here so a
+-- fresh install only has to run one file.
+-- =========================================================
+
+-- Find expiring offers cheaply (drives /api/cron/assignment-tick).
+create index if not exists idx_service_requests_offer_expiry
+  on public.service_requests (offers_expires_at)
+  where assignment_status = 'offered';
+
+-- A technician may hold at most one active offer at a time. This is what turns
+-- a concurrent double-offer from a silent last-write-wins into a unique
+-- violation the assignment engine can detect and skip past.
+create unique index if not exists uniq_active_offer_per_technician
+  on public.service_requests (assigned_technician_id)
+  where assignment_status = 'offered' and assigned_technician_id is not null;
+
+-- Marks a lapsed offer as rejected (so the same technician is never re-offered
+-- the same request) and returns the request to "matching".
+create or replace function public.expire_offer(request_id uuid)
+returns void
+language sql
+security definer set search_path = public
+as $$
+  update public.technician_offer_history
+    set status = 'rejected', reason = coalesce(reason, 'Offer expired')
+    where service_request_id = request_id and status = 'offered';
+
+  update public.service_requests
+    set assigned_technician_id = null,
+        assignment_status = 'matching',
+        offers_expires_at = null,
+        updated_at = now()
+    where id = request_id and assignment_status = 'offered';
+$$;
 

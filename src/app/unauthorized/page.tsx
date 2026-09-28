@@ -7,7 +7,7 @@ export default function UnauthorizedPage() {
       <p className="mt-2 text-ink/65">
         Your account doesn&apos;t have access to that section of SPARKServ.
       </p>
-      <Link href="/" className="mt-6 inline-block text-brand-600 hover:underline">
+      <Link href="/" className="mt-6 inline-block text-brand-ink hover:underline">
         Back to home
       </Link>
     </div>

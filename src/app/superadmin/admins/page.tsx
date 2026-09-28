@@ -32,7 +32,7 @@ export default async function SuperAdminAdminsPage() {
             admins.map((u) => (
               <div
                 key={u.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-ink/8 bg-white p-4 shadow-card"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-ink/8 bg-surface p-4 shadow-card"
               >
                 <div>
                   <p className="font-medium text-ink">{u.name}</p>
@@ -56,7 +56,7 @@ export default async function SuperAdminAdminsPage() {
           {others.map((u) => (
             <div
               key={u.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-ink/8 bg-white p-4 shadow-card"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-ink/8 bg-surface p-4 shadow-card"
             >
               <div>
                 <p className="font-medium text-ink">{u.name}</p>

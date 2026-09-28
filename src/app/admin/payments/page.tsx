@@ -40,7 +40,7 @@ export default async function AdminPaymentsPage() {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-card border border-ink/8 bg-white p-3 shadow-card">
+    <div className="rounded-card border border-ink/8 bg-surface p-3 shadow-card">
       <p className="font-display text-lg font-semibold text-ink">{value}</p>
       <p className="mt-0.5 text-xs text-ink/50">{label}</p>
     </div>

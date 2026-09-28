@@ -30,12 +30,16 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json();
     const userUpdate = {
-      name: typeof body.name === "string" ? body.name.trim() : user.name,
+      first_name: typeof body.first_name === "string" ? body.first_name.trim() : user.first_name,
+      last_name: typeof body.last_name === "string" ? body.last_name.trim() : user.last_name,
+      middle_initial: typeof body.middle_initial === "string" ? body.middle_initial.trim() || null : user.middle_initial,
       phone: typeof body.phone === "string" ? body.phone.trim() || null : user.phone,
-      location: typeof body.location === "string" ? body.location.trim() || null : user.location,
+      address: typeof body.address === "string" ? body.address.trim() || null : user.address,
     };
 
-    if (!userUpdate.name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    if (!userUpdate.first_name && !userUpdate.last_name) {
+      return NextResponse.json({ error: "First name or last name is required" }, { status: 400 });
+    }
 
     const supabase = createClient();
     const { data, error } = await supabase.from("users").update(userUpdate).eq("id", user.id).select("*").single();

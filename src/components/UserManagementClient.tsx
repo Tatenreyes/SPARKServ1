@@ -36,7 +36,7 @@ export default function UserManagementClient({ initialUsers }: { initialUsers: U
 
   return (
     <div className="mt-6">
-      <div className="mb-3 flex items-center gap-2 rounded-lg border border-ink/15 bg-white px-3 py-2">
+      <div className="mb-3 flex items-center gap-2 rounded-lg border border-ink/15 bg-surface px-3 py-2">
         <Search className="h-4 w-4 text-ink/35" />
         <input
           value={search}
@@ -46,7 +46,7 @@ export default function UserManagementClient({ initialUsers }: { initialUsers: U
         />
       </div>
 
-      <div className="overflow-x-auto rounded-card border border-ink/8 bg-white shadow-card">
+      <div className="overflow-x-auto rounded-card border border-ink/8 bg-surface shadow-card">
         <table className="min-w-[680px] w-full text-left text-sm">
           <thead className="border-b border-ink/8 bg-canvas text-xs uppercase tracking-wide text-ink/40">
             <tr>
@@ -72,7 +72,7 @@ export default function UserManagementClient({ initialUsers }: { initialUsers: U
                     <p className="text-xs text-ink/40">{u.email}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold capitalize text-brand-600">
+                    <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-semibold capitalize text-brand-ink">
                       {u.role.replace("_", " ")}
                     </span>
                   </td>
@@ -80,8 +80,8 @@ export default function UserManagementClient({ initialUsers }: { initialUsers: U
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                         u.is_active
-                          ? "bg-signal-50 text-signal-600"
-                          : "bg-alert-50 text-alert-600"
+                          ? "bg-signal-soft text-signal-ink"
+                          : "bg-alert-soft text-alert-ink"
                       }`}
                     >
                       {u.is_active ? "Active" : "Inactive"}
@@ -94,7 +94,7 @@ export default function UserManagementClient({ initialUsers }: { initialUsers: U
                     <button
                       onClick={() => toggleStatus(u)}
                       disabled={busyId === u.id}
-                      className="text-xs font-semibold text-brand-500 hover:text-brand-600 disabled:opacity-50"
+                      className="text-xs font-semibold text-brand-ink hover:text-brand-ink disabled:opacity-50"
                     >
                       {busyId === u.id ? "..." : u.is_active ? "Deactivate" : "Activate"}
                     </button>

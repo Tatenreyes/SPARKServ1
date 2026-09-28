@@ -2,8 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------- theming
+   Every colour that must respond to the theme is stored as an RGB *triplet*
+   rather than a hex, so Tailwind's `/opacity` modifiers keep working:
+   `border-ink/8` compiles to `rgb(var(--spark-ink) / 0.08)`. A hex here would
+   silently break the ~100 alpha-modified utilities already in the app.
+
+   `color-scheme` is set alongside each theme, which themes the NATIVE controls
+   — date/time pickers, scrollbars, autofill. This app is full of
+   <input type="date|time"> (booking, availability, request wizard); without it
+   those render as bright white boxes punched into a dark page. */
 :root {
   color-scheme: light;
+
+  --spark-canvas: 245 247 251;   /* #F5F7FB — page background      */
+  --spark-surface: 255 255 255;  /* #FFFFFF — cards, sheets, menus */
+  --spark-ink: 16 38 74;         /* #10264A — primary text         */
+  --spark-muted: 100 116 139;    /* slate-500 — secondary text     */
+  --spark-line: 226 232 240;     /* slate-200 — structural border  */
+  --spark-soft: 241 245 249;     /* slate-100 — hover fill, tracks */
+
+  --spark-brand-ink: 14 66 159;    /* brand-600, read as text  */
+  --spark-signal-ink: 19 138 77;   /* signal-600, read as text */
+  --spark-alert-ink: 185 57 57;    /* alert-600, read as text  */
+  --spark-accent-ink: 194 65 12;   /* accent-600, read as text */
+  --spark-warn-ink: 180 83 9;      /* amber-700, read as text  */
+
+  --spark-brand-soft: 238 245 255;  /* brand-50  tonal background */
+  --spark-signal-soft: 234 251 243; /* signal-50                  */
+  --spark-alert-soft: 255 241 242;  /* alert-50                   */
+  --spark-accent-soft: 255 244 237; /* accent-50                  */
+  --spark-warn-soft: 255 251 235;   /* amber-50                   */
+}
+
+/* Dark is deliberately NOT an inversion of light:
+   - the canvas is a desaturated navy, not pure black, because near-black makes
+     the brand blue vibrate at the edges;
+   - surfaces sit LIGHTER than the canvas so cards still read as raised, which
+     is the opposite relationship from light mode;
+   - every "-ink" text colour moves up the scale (600 -> 300/400) to hold
+     contrast against a dark field. */
+.dark {
+  color-scheme: dark;
+
+  --spark-canvas: 8 13 26;
+  --spark-surface: 17 25 42;
+  --spark-ink: 226 232 240;
+  --spark-muted: 148 163 184;
+  --spark-line: 39 51 75;
+  --spark-soft: 26 36 56;
+
+  --spark-brand-ink: 120 169 255; /* brand-300   */
+  --spark-signal-ink: 52 211 153; /* emerald-400 */
+  --spark-alert-ink: 248 113 113; /* red-400     */
+  --spark-accent-ink: 251 146 60; /* orange-400  */
+  --spark-warn-ink: 251 191 36;   /* amber-400   */
+
+  --spark-brand-soft: 16 30 54;
+  --spark-signal-soft: 11 38 31;
+  --spark-alert-soft: 45 20 26;
+  --spark-accent-soft: 45 27 16;
+  --spark-warn-soft: 42 33 13;
 }
 
 html {
@@ -13,11 +72,11 @@ html {
 html,
 body {
   min-height: 100%;
-  background: #ffffff;
+  background: rgb(var(--spark-canvas));
 }
 
 body {
-  color: #10264a;
+  color: rgb(var(--spark-ink));
 }
 
 h1,
@@ -45,11 +104,11 @@ img {
 }
 
 ::selection {
-  background: rgba(36, 107, 255, 0.18);
+  background: rgba(18, 85, 199, 0.18);
 }
 
 :focus-visible {
-  outline: 2px solid #246bff;
+  outline: 2px solid #1255c7;
   outline-offset: 2px;
 }
 
@@ -58,20 +117,34 @@ img {
     @apply bg-canvas text-ink;
   }
 
+  /* Cards use a neutral hairline border + a very soft shadow. The old
+     `border-[#BFDBFE]` (brand-200) gave every surface a blue outline, which
+     read as decorative rather than structural at dashboard density. */
   .spark-card {
-    @apply rounded-card border border-[#BFDBFE] bg-white;
+    @apply rounded-card border border-line bg-surface shadow-[0_1px_2px_rgba(16,38,74,0.04)];
   }
 
-  .spark-button-primary {
-    @apply inline-flex cursor-pointer items-center justify-center rounded-lg bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-600 active:scale-[0.98];
+  /* Card that is itself a link or button. Elevation changes on hover through
+     border + shadow only — never a transform, because `dashboard.md` (and the
+     Master anti-pattern list) forbid layout-shifting hovers. */
+  .spark-card-interactive {
+    @apply rounded-card border border-line bg-surface shadow-[0_1px_2px_rgba(16,38,74,0.04)] transition-all duration-200 hover:border-brand-300 hover:shadow-card cursor-pointer;
   }
 
-  .spark-button-secondary {
-    @apply inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-600 bg-white px-5 py-3 text-sm font-semibold text-brand-700 transition-all duration-200 hover:border-brand-500 hover:bg-brand-50;
+  /* Small caps label that sits above a section title or inside a hero band. */
+  .spark-eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-muted;
   }
 
-  .spark-pill {
-    @apply inline-flex items-center rounded-full border border-spark-300 bg-spark-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-spark-600;
+  /* Gradient is permitted in exactly two places (documented in
+     design-system/sparkserv/MASTER.md): the dashboard hero band and the
+     support banner. Never as decoration behind content or on cards. */
+  .spark-hero-gradient {
+    background-image: linear-gradient(103deg, #eef5ff 0%, #dcebff 54%, #c4dbff 100%);
+  }
+
+  .spark-navy-gradient {
+    background-image: linear-gradient(103deg, #0b1b33 0%, #12305b 62%, #1255c7 100%);
   }
 
   .spark-section {
@@ -82,6 +155,48 @@ img {
     -webkit-mask-image: linear-gradient(to right, transparent 0%, black 16%, black 100%);
     mask-image: linear-gradient(to right, transparent 0%, black 16%, black 100%);
   }
+
+  .spark-button-primary {
+    @apply inline-flex cursor-pointer items-center justify-center rounded-lg bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-600 active:scale-[0.98];
+  }
+
+  /* Reserved for the single most important action on a screen — see the
+     `accent` token comment in tailwind.config.ts. */
+  .spark-button-accent {
+    @apply inline-flex cursor-pointer items-center justify-center rounded-lg bg-accent-500 px-5 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-accent-600 active:scale-[0.98];
+  }
+
+  .spark-button-secondary {
+    @apply inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-600 bg-surface px-5 py-3 text-sm font-semibold text-brand-ink transition-all duration-200 hover:border-brand-500 hover:bg-brand-soft;
+  }
+
+  .spark-pill {
+    @apply inline-flex items-center rounded-full border border-line bg-brand-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-ink;
+  }
+
+  /* The landing hero's legibility scrim. A gradient, but a functional one: it
+     holds white body copy over the photograph at 4.5:1, which is why it is
+     allowed to sit outside the two decorative-gradient surfaces. Keep it as a
+     utility rather than an arbitrary Tailwind value so the contrast fix stays
+     reviewable in one place. */
+  .hero-copy-scrim {
+    background-image: linear-gradient(
+      103deg,
+      rgba(6, 20, 44, 0.96) 0%,
+      rgba(8, 27, 58, 0.93) 32%,
+      rgba(9, 32, 68, 0.66) 54%,
+      rgba(9, 32, 68, 0.22) 76%,
+      rgba(9, 32, 68, 0.04) 100%
+    );
+  }
+}
+
+/* The dashboard hero band's pale-blue gradient would read as a glaring light
+   panel on a dark canvas, so dark swaps it for a low-luminance navy equivalent.
+   Written as an override rather than a `dark:`-prefixed pair so the light values
+   above stay exactly as designed and both are reviewable together. */
+.dark .spark-hero-gradient {
+  background-image: linear-gradient(103deg, #0c1730 0%, #122647 54%, #17325e 100%);
 }
 
 @media (prefers-reduced-motion: reduce) {

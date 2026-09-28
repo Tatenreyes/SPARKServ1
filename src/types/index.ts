@@ -1,22 +1,9 @@
 export * from "./database";
 
-export interface TechnicianWithScore {
-  id: string;
-  name: string;
-  specializations: string[];
-  experience_years: number;
-  rating: number;
-  availability: boolean;
-  is_new: boolean;
-  active_job_load: number;
-  distance_km: number | null;
-  score: number;
-  breakdown: {
-    ratingComponent: number;
-    experienceComponent: number;
-    availabilityComponent: number;
-    distanceComponent: number;
-    newTechBoost: number;
-    starvationBoost: number;
-  };
-}
+// `TechnicianWithScore` used to live here: a rating/experience/distance score
+// with a boolean `availability` flag, produced by lib/recommendation.ts and
+// served by POST /api/recommend. Both are gone. The queue is a fair rotation
+// (QUEUE-SYSTEM.md), so nothing in this app ranks technicians, and availability
+// is a per-request schedule check, never a stored boolean on a person.
+
+
