@@ -35,6 +35,7 @@ const source = (path) => readFileSync(new URL(path, ROOT), "utf8");
 const DASHBOARD = "src/app/customer/dashboard/page.tsx";
 const TRACKING = "src/components/ServiceTracking.tsx";
 const REQUEST_PAGE = "src/app/customer/service-request/[id]/page.tsx";
+const REQUEST_LIST = "src/app/customer/repairs/requests/page.tsx";
 const REQUEST_CLIENT = "src/components/RequestDetailClient.tsx";
 const COVERAGE = "src/lib/assignment-coverage.ts";
 
@@ -43,14 +44,24 @@ const COVERAGE = "src/lib/assignment-coverage.ts";
 test("Active repairs links to the request list, not the new-request wizard", () => {
   const page = source(DASHBOARD);
 
+  // Assert on the TILE's own href rather than "somewhere within N characters of the
+  // label": a fixed window breaks every time a comment above it grows, which is a
+  // false alarm about a link that is perfectly correct.
+  const tile = page.indexOf('label: "Active repairs"');
+  assert.ok(tile > 0, `${DASHBOARD} must still have the tile`);
+
+  const hrefAt = page.indexOf("href:", tile);
+  assert.ok(hrefAt > tile, "the tile must carry an href");
+  const hrefLine = page.slice(hrefAt, page.indexOf("\n", hrefAt));
+
   assert.match(
-    page,
-    /label: "Active repairs",[\s\S]{0,400}?href: "\/customer\/repairs\/requests"/,
+    hrefLine,
+    /\/customer\/repairs\/requests/,
     `${DASHBOARD} must send the tile to the customer's own requests`
   );
   assert.doesNotMatch(
-    page,
-    /href: "\/customer\/service-request"/,
+    hrefLine,
+    /service-request/,
     "`/customer/service-request` only redirects to the new-request wizard"
   );
 });
@@ -119,4 +130,33 @@ test("the request page passes coverage through to the assignment card", () => {
   assert.match(source(REQUEST_PAGE), /qualifiedTechnicianAvailable=\{qualifiedTechnicianAvailable\}/);
   assert.match(source(REQUEST_CLIENT), /qualifiedTechnicianAvailable\?: boolean \| null/);
   assert.match(source(REQUEST_CLIENT), /qualifiedTechnicianAvailable=\{qualifiedTechnicianAvailable\}/);
+});
+
+// ------------------------- 4. the tile's number matches the list it opens
+
+test("the Active repairs tile opens the very view it counts", () => {
+  assert.match(source(DASHBOARD), /href: "\/customer\/repairs\/requests\?status=active"/);
+  assert.match(
+    source(DASHBOARD),
+    /activeRequests = \(requests \?\? \[\]\)\.filter\(\(r\) => !isClosedRequestStatus\(r\.status\)\)/,
+    "the count must use the shared rule, not a local string pair that can drift from the query"
+  );
+});
+
+test("the list filters closed requests in SQL, in the page AND its count", () => {
+  const list = source(REQUEST_LIST);
+  assert.match(list, /import \{ CLOSED_REQUEST_STATUSES \} from "@\/lib\/estimate-costs"/);
+  assert.match(list, /const onlyActive = searchParams\?\.status === "active"/);
+  assert.equal(
+    [...list.matchAll(/\.not\("status", "in", closedFilter\)/g)].length,
+    2,
+    "the page query and the count query must both carry the filter, or the pager lies"
+  );
+});
+
+test("paging keeps the customer in the view they are in", () => {
+  const list = source(REQUEST_LIST);
+  assert.match(list, /const pageHref = \(target: number\) =>/);
+  assert.match(list, /href=\{pageHref\(page - 1\)\}/);
+  assert.match(list, /href=\{pageHref\(page \+ 1\)\}/);
 });

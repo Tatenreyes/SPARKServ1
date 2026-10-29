@@ -7,6 +7,7 @@ import DashboardServiceIllustration from "@/components/DashboardServiceIllustrat
 import { ServiceTracking } from "@/components/ServiceTracking";
 import { QuickActions } from "@/components/QuickActions";
 import { applianceCoverage } from "@/lib/assignment-coverage";
+import { isClosedRequestStatus } from "@/lib/estimate-costs";
 import { formatPeso, type MobileAction } from "@/lib/customer-actions";
 import {
   CalendarCheck2,
@@ -43,9 +44,9 @@ export default async function CustomerDashboard() {
       .eq("customer_id", user!.id),
   ]);
 
-  const activeRequests = (requests ?? []).filter(
-    (r) => r.status !== "completed" && r.status !== "cancelled"
-  );
+  // "Active" is the shared rule (`isClosedRequestStatus`), not a local pair of string
+  // comparisons: the tile's number and the `?status=active` list it opens must agree.
+  const activeRequests = (requests ?? []).filter((r) => !isClosedRequestStatus(r.status));
 
   const dashboardNow = Date.now();
   const upcomingBookings = (bookings ?? []).filter(
@@ -278,8 +279,9 @@ export default async function CustomerDashboard() {
             value: activeRequests.length,
             // The list of this customer's requests — NOT `/customer/service-request`,
             // which is a legacy alias that redirects to the new-request wizard, so
-            // the tile used to open a blank "service inquiry" form.
-            href: "/customer/repairs/requests",
+            // the tile used to open a blank "service inquiry" form. `?status=active`
+            // is the same view this tile counts, so the number and the list agree.
+            href: "/customer/repairs/requests?status=active",
             icon: Wrench,
             colorClass: "bg-brand-soft text-brand-ink",
             hint: "View requests",

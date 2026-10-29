@@ -225,13 +225,24 @@ export function canBookFromRequest(status: string | null | undefined): boolean {
 }
 
 /**
+ * The request statuses that mean the request is over.
+ *
+ * Kept as a LIST as well as a predicate because the same rule has to be pushed
+ * into a query: the request list filters closed requests out in SQL rather than
+ * fetching them and dropping them in JS, and that page's count must use the
+ * identical filter or its pagination lies about how many pages there are. One
+ * definition, two uses.
+ */
+export const CLOSED_REQUEST_STATUSES = ["completed", "cancelled"] as const;
+
+/**
  * True when the request behind an estimate is over — completed or cancelled.
  *
  * Such an estimate is the approved RECORD of what was agreed, not something awaiting
  * a decision or an appointment, so a customer screen must offer neither.
  */
 export function isClosedRequestStatus(status: string | null | undefined): boolean {
-  return status === "completed" || status === "cancelled";
+  return CLOSED_REQUEST_STATUSES.some((closed) => closed === status);
 }
 
 /**

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
+import { CLOSED_REQUEST_STATUSES } from "@/lib/estimate-costs";
 import { RecentRepairTable } from "@/components/RecentRepairTable";
 
 /**
@@ -19,7 +20,7 @@ const PAGE_SIZE = 10;
 export default async function MyRepairRequestsPage({
   searchParams,
 }: {
-  searchParams?: { page?: string };
+  searchParams?: { page?: string; status?: string };
 }) {
   const user = await getCurrentUser();
   const supabase = createClient();
@@ -28,23 +29,45 @@ export default async function MyRepairRequestsPage({
   const page = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
   const from = (page - 1) * PAGE_SIZE;
 
-  const [{ data: requests }, { count }] = await Promise.all([
-    supabase
-      .from("service_requests")
-      .select("*")
-      .eq("customer_id", user!.id)
-      .order("created_at", { ascending: false })
-      .range(from, from + PAGE_SIZE - 1),
-    supabase
-      .from("service_requests")
-      .select("*", { count: "exact", head: true })
-      .eq("customer_id", user!.id),
-  ]);
+  /**
+   * `?status=active` is the view the dashboard's "Active repairs" tile opens, so the
+   * number on the tile and the list behind it agree.
+   *
+   * The filter goes into BOTH queries — the page and its count — because a count that
+   * ignored it would give the pager the wrong number of pages. The statuses come from
+   * `CLOSED_REQUEST_STATUSES`, the same list `isClosedRequestStatus()` answers from,
+   * so the SQL filter and every client-side check stay one rule.
+   */
+  const onlyActive = searchParams?.status === "active";
+  const closedFilter = `(${CLOSED_REQUEST_STATUSES.join(",")})`;
+
+  let requestsQuery = supabase
+    .from("service_requests")
+    .select("*")
+    .eq("customer_id", user!.id)
+    .order("created_at", { ascending: false })
+    .range(from, from + PAGE_SIZE - 1);
+
+  let countQuery = supabase
+    .from("service_requests")
+    .select("*", { count: "exact", head: true })
+    .eq("customer_id", user!.id);
+
+  if (onlyActive) {
+    requestsQuery = requestsQuery.not("status", "in", closedFilter);
+    countQuery = countQuery.not("status", "in", closedFilter);
+  }
+
+  const [{ data: requests }, { count }] = await Promise.all([requestsQuery, countQuery]);
 
   const total = count ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasPrevious = page > 1;
   const hasNext = page < pageCount;
+
+  /** Paging must not drop the view the customer is in. */
+  const pageHref = (target: number) =>
+    `/customer/repairs/requests?page=${target}${onlyActive ? "&status=active" : ""}`;
 
   return (
     <div className="space-y-5">
@@ -55,14 +78,33 @@ export default async function MyRepairRequestsPage({
         </h1>
         <p className="mt-1.5 text-sm leading-relaxed text-muted">
           {total === 0
-            ? "Every request you submit will be listed here."
-            : `${total} request${total === 1 ? "" : "s"} · newest first`}
+            ? onlyActive
+              ? "Nothing is waiting — every request you have submitted is finished or cancelled."
+              : "Every request you submit will be listed here."
+            : `${total} ${onlyActive ? "active " : ""}request${total === 1 ? "" : "s"} · newest first`}
         </p>
+        <Link
+          href={onlyActive ? "/customer/repairs/requests" : "/customer/repairs/requests?status=active"}
+          className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-ink hover:underline"
+        >
+          {onlyActive ? "Show every request" : "Show active only"}
+        </Link>
       </div>
 
-      <div className="rounded-card border border-line bg-surface px-4 py-4 shadow-[0_1px_2px_rgba(16,38,74,0.04)] sm:px-5">
-        <RecentRepairTable requests={requests ?? []} limit={PAGE_SIZE} />
-      </div>
+      {onlyActive && total === 0 ? (
+        /* The table's own empty state reads "no repair requests yet", which would be
+           wrong here: the customer does have requests, they are simply closed. */
+        <div className="rounded-card border border-line bg-surface px-4 py-8 text-center shadow-[0_1px_2px_rgba(16,38,74,0.04)] sm:px-5">
+          <p className="text-sm font-medium text-ink">Nothing active right now</p>
+          <p className="mt-1 text-xs text-muted">
+            Every request you have submitted is either finished or cancelled.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-card border border-line bg-surface px-4 py-4 shadow-[0_1px_2px_rgba(16,38,74,0.04)] sm:px-5">
+          <RecentRepairTable requests={requests ?? []} limit={PAGE_SIZE} />
+        </div>
+      )}
 
       {pageCount > 1 && (
         <nav
@@ -70,7 +112,7 @@ export default async function MyRepairRequestsPage({
           className="flex items-center justify-between gap-3"
         >
           <PageLink
-            href={`/customer/repairs/requests?page=${page - 1}`}
+            href={pageHref(page - 1)}
             disabled={!hasPrevious}
             direction="previous"
           />
@@ -78,7 +120,7 @@ export default async function MyRepairRequestsPage({
             Page {page} of {pageCount}
           </p>
           <PageLink
-            href={`/customer/repairs/requests?page=${page + 1}`}
+            href={pageHref(page + 1)}
             disabled={!hasNext}
             direction="next"
           />
