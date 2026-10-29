@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, ClipboardList } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
+import RemoveRequestControl from "@/components/RemoveRequestControl";
 import MobileRepairCard, { repairCta } from "@/components/mobile/MobileRepairCard";
 import type { ServiceRequestRow } from "@/types/database";
 
@@ -115,13 +116,21 @@ export function RecentRepairTable({
                 <td className="py-3.5 pl-4 text-right align-top">
                   {/* `/customer/service-request/[id]` already existed but nothing
                       on the dashboard linked to it. */}
-                  <Link
-                    href={`/customer/service-request/${request.id}`}
-                    aria-label={`Open request ${request.id.slice(0, 8)}`}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted/80 transition duration-200 hover:bg-brand-soft hover:text-brand-ink"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Link>
+                  <span className="inline-flex items-center gap-1">
+                    {/* Offered only while nothing depends on the request; the
+                        server refuses the rest and says why. */}
+                    {request.status !== "completed" &&
+                      request.assignment_status !== "accepted" && (
+                        <RemoveRequestControl requestId={request.id} variant="inline" />
+                      )}
+                    <Link
+                      href={`/customer/service-request/${request.id}`}
+                      aria-label={`Open request ${request.id.slice(0, 8)}`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted/80 transition duration-200 hover:bg-brand-soft hover:text-brand-ink"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </span>
                 </td>
               </tr>
             ))}

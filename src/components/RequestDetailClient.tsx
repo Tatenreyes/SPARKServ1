@@ -4,6 +4,7 @@ import { CalendarClock } from "lucide-react";
 import { formatRequestedWindow } from "@/lib/service-time";
 import AssignmentStatusCard from "@/components/AssignmentStatusCard";
 import EstimateReviewCard from "@/components/EstimateReviewCard";
+import RemoveRequestControl from "@/components/RemoveRequestControl";
 import ServiceLocationCard from "@/components/ServiceLocationCard";
 import StatusBadge from "@/components/StatusBadge";
 import { isOpenEstimateStatus } from "@/lib/estimate-costs";
@@ -123,8 +124,25 @@ export default function RequestDetailClient({
           />
         )}
       </section>
+
+      {/* Removing a request the customer no longer wants. Offered only while
+          nothing depends on it: the two states a customer can see for themselves
+          (a finished repair, an accepted technician) hide it, and so does a
+          prepared estimate. The server refuses the rest and says why. */}
+      {request.status !== "completed" &&
+        request.assignment_status !== "accepted" &&
+        initialEstimates.length === 0 && (
+          <section>
+            <RemoveRequestControl
+              requestId={request.id}
+              applianceType={request.appliance_type}
+              redirectTo="/customer/repairs/requests"
+            />
+          </section>
+        )}
     </div>
   );
+}
 
 /**
  * The window this customer asked for, echoed back on their own request so they
@@ -148,6 +166,4 @@ function RequestedWindow({
       {label ? <span>You asked for {label}</span> : <span>Any time works — you agree the slot with your technician</span>}
     </p>
   );
-}
-
 }
