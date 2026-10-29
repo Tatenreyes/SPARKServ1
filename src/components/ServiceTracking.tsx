@@ -81,10 +81,19 @@ export function ServiceTracking({
   }
 
   const booking = bookings.find((row) => row.status !== "cancelled") ?? null;
-  const latestEstimate = estimates[0];
+  // A DRAFT is the technician's working copy, not a quote the customer has been
+  // given: the strip only advances on versions that were actually submitted.
+  const submitted = estimates.filter((row) => row.status !== "draft");
+  const latestEstimate = submitted[0];
+  // The CURRENT approval — a version that was approved and then replaced by a
+  // revision no longer authorises the work, so the step reopens.
   const acceptedEstimate = estimates.find((row) => row.status === "accepted");
   const bookingActive =
-    booking?.status === "in_progress" || booking?.status === "awaiting_inspection";
+    booking?.status === "in_progress" ||
+    booking?.status === "awaiting_inspection" ||
+    // The repair is physically done but the transaction is not: the customer owes
+    // a payment reference and an administrator has to verify it.
+    booking?.status === "awaiting_payment";
   const cancelled = request.status === "cancelled";
   const completed = request.status === "completed" || booking?.status === "completed";
 
@@ -98,14 +107,14 @@ export function ServiceTracking({
     {
       key: "estimate",
       label: "Estimate prepared",
-      done: estimates.length > 0,
-      at: latestEstimate?.created_at,
+      done: submitted.length > 0,
+      at: latestEstimate?.submitted_at ?? latestEstimate?.created_at,
     },
     {
       key: "approved",
       label: "Estimate approved",
       done: Boolean(acceptedEstimate),
-      at: acceptedEstimate?.created_at,
+      at: acceptedEstimate?.approved_at ?? acceptedEstimate?.decided_at ?? undefined,
     },
     {
       key: "scheduled",
@@ -120,7 +129,10 @@ export function ServiceTracking({
     },
     {
       key: "completed",
-      label: "Completed",
+      label: "Payment verified",
+      // The last step is the payment, because completion now means exactly that: a
+      // repair is `completed` only once an administrator has verified the
+      // customer's reference (confirm_payment()).
       done: Boolean(completed),
       at: completed ? booking?.updated_at : undefined,
     },

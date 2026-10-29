@@ -29,7 +29,7 @@ const ACTIONS: {
   },
   {
     label: "Contact support",
-    hint: "24/7 assistance",
+    hint: "Requests and bookings",
     href: "/customer/support",
     icon: LifeBuoy,
     tone: "bg-warn-soft text-warn-ink",
@@ -50,12 +50,12 @@ export function QuickActions() {
         <Link
           key={action.label}
           href={action.href}
-          className="group flex cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface p-3.5 transition duration-200 hover:border-brand-300 hover:bg-brand-soft/40"
+          className="group flex cursor-pointer items-center gap-2 rounded-xl border border-line bg-surface p-2 transition duration-200 hover:border-brand-300 hover:bg-brand-soft/40"
         >
           <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${action.tone}`}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${action.tone}`}
           >
-            <action.icon className="h-4 w-4" />
+            <action.icon className="h-3.5 w-3.5" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs font-semibold text-ink">{action.label}</span>

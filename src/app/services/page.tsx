@@ -23,22 +23,22 @@ const services = [
   {
     title: "Refrigerators",
     description: "Expert repair for all refrigerator brands and types.",
-    image: "/images/refrigerator.png",
+    image: "/images/appliances/refrigerator.png",
   },
   {
     title: "Air Conditioners",
     description: "Installation, maintenance, and repair services.",
-    image: "/images/aircon.jpg",
+    image: "/images/appliances/air-conditioner.png",
   },
   {
     title: "Washing Machines",
     description: "Reliable fixes for top-load and front-load washers.",
-    image: "/images/washing machine.jpg",
+    image: "/images/appliances/washing-machine.png",
   },
   {
     title: "Microwave Ovens",
     description: "Quick diagnostics and repairs for microwave units.",
-    image: "/images/Microwave-Oven-Repairing.jpg",
+    image: "/images/appliances/microwave-oven.png",
   },
 ];
 
@@ -104,13 +104,13 @@ export default function ServicesPage() {
                 whileHover={{ y: -6, transition: { duration: 0.2 } }}
                 className="group relative overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition hover:shadow-lg"
               >
-                <div className="aspect-[4/3] w-full overflow-hidden bg-soft">
+                <div className="aspect-[4/3] w-full overflow-hidden bg-white">
                   <Image
                     src={service.image}
                     alt={service.title}
                     width={400}
                     height={300}
-                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                    className="h-full w-full object-contain p-4 transition duration-500 group-hover:scale-105"
                   />
                 </div>
                 <div className="p-5">

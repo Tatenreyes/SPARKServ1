@@ -149,6 +149,53 @@ for being unavailable at one specific time. Flip `queue_decline_consumes_turn` t
 `true` to change the policy — the behaviour is implemented and audited either way,
 so switching it is a settings change, not a code change.
 
+### The offer TTL needs the sweep to run
+
+An offer whose TTL has passed is lapsed by `expire_stale_offers()`, which is only
+called by `GET /api/cron/assignment-tick` (Vercel Cron in production; a manual
+request in dev). **A technician holding a lapsed offer still counts as "holding an
+active offer"** — `uniq_active_offer_per_technician` is a partial index on
+`assignment_status = 'offered'`, and the walk skips them with
+`SKIPPED_DUE_TO_ACTIVE_OFFER`. If the sweep never runs, ignored offers pile up and
+every new request ends in `waiting` with no offer sent to anyone.
+
+Two layers protect against that:
+
+1. **The engine no longer waits for the sweep** (`migration_offer_lifecycle.sql`).
+   Before each walk, `assign_technician_to_request()` releases every offer whose
+   TTL has already passed (`lapse_offer()`), setting those requests to `waiting` so
+   the sweep re-matches them. A dead offer can therefore never freeze the
+   rotation, and nothing is re-offered from inside the walk — which is what keeps
+   it from recursing into itself.
+2. **The sweep still does the real work**: it lapses, *re-offers* and *notifies*.
+   Keep it running. In production `vercel.json` schedules the route every 5
+   minutes (`CRON_SECRET` must be set); locally:
+
+```
+npm run cron:tick              # sweep the project in .env.local
+npm run cron:tick -- --dry-run # show what would change, touch nothing
+curl "http://localhost:3000/api/cron/assignment-tick"   # same steps via the route
+```
+
+Symptom this fixes: a customer's request sits in "Waiting for an eligible
+technician", the technician sees nothing to accept, and `technician_queue_events`
+shows every candidate skipped with `holding_offer`.
+
+Queue positions are untouched by any of this — nobody is removed for ignoring an
+offer.
+
+### Cancelling a request releases its offer
+
+`service_requests.status = 'cancelled'` is now handled at three levels
+(`migration_offer_lifecycle.sql`), because a withdrawn request must not be
+workable:
+
+| Level | Behaviour |
+| --- | --- |
+| Trigger `lapse_offer_on_cancel` | the moment a request becomes `cancelled`, its live offer is released (history marked rejected, `EXPIRED` audit event, assignment cleared) instead of waiting for the TTL |
+| `respond_to_offer()` | refuses to process an offer on a cancelled/completed request: releases it and answers `outcome = 'cancelled'` (HTTP 409 from the API), so a technician can never end up holding `accepted` + `cancelled` |
+| `assign_technician_to_request()` | never offers a cancelled/completed request again (`outcome: 'unchanged'`, `reason: 'request_closed'`) |
+
 ## Server-side API (RPCs)
 
 | Function | Access | Purpose |

@@ -252,8 +252,22 @@ export function myQueueStanding(queue: ApplianceQueue): string {
   return "You keep this position until you accept a request — accepting consumes your turn and moves you to the end of the rotation.";
 }
 
+/**
+ * What the caller knows about coverage for the request's appliance type.
+ *
+ * `false` means the database has CONFIRMED that no technician currently qualifies
+ * (`appliance_has_qualified_technician()`); `true` means at least one does; absent or
+ * `null` means the caller does not know and must not guess.
+ */
+export interface AssignmentCoverage {
+  qualifiedTechnicianAvailable?: boolean | null;
+}
+
 /** Customer-facing wording for an assignment state. Never exposes the queue. */
-export function customerAssignmentCopy(assignmentStatus: string) {
+export function customerAssignmentCopy(
+  assignmentStatus: string,
+  coverage?: AssignmentCoverage
+) {
   switch (assignmentStatus) {
     case "matching":
       return {
@@ -265,11 +279,31 @@ export function customerAssignmentCopy(assignmentStatus: string) {
         title: "Waiting for a technician to respond",
         body: "A qualified technician is reviewing your request. If they do not respond in time we pass it to the next one automatically.",
       };
-    case "waiting":
+    case "waiting": {
+      // "Nobody covers this appliance yet" and "everybody is busy right now" are
+      // different promises, and only one of them is worth waiting for. The caller
+      // knows which one it is only when the API asked the database, so the wording
+      // branches on that answer and never guesses.
+      if (coverage?.qualifiedTechnicianAvailable === false) {
+        return {
+          title: "No technician covers this appliance yet",
+          body: "Your request is saved, but no approved technician services this appliance type at the moment, so it cannot be matched yet. Please contact support — we will tell you as soon as somebody can take it. There is nothing to wait for on this page.",
+        };
+      }
+
+      // Deliberately does NOT claim a cause. This state is reached TWO ways: every
+      // qualified technician is booked or at capacity for the slot, OR no approved
+      // technician covers the appliance type at all. A technician who is not approved
+      // never enters the rotation — `technician_eligibility_failure()` answers
+      // `not_available` for them, and `not_in_queue` when they have no ACTIVE row in
+      // `technician_queue_state` — so a request for an appliance nobody approved
+      // covers sits here for ever. When the caller does not know which case this is,
+      // "every qualified technician is booked" is a false reassurance.
       return {
         title: "Waiting for an eligible technician",
-        body: "Every qualified technician is booked or at capacity for that slot. Your request stays in line — we will match you as soon as someone becomes available, so you can leave this page.",
+        body: "We have not matched a qualified technician to this request yet. It stays in line, and we will match you as soon as one becomes available for this appliance and the time you asked for — so you can leave this page. If it is urgent, contact support and we will follow it up.",
       };
+    }
     case "accepted":
       return {
         title: "Technician accepted your request",

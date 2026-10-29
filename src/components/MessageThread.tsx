@@ -4,6 +4,13 @@ import { useState } from "react";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import type { MessageRow } from "@/types/database";
 
+/**
+ * The conversation itself.
+ *
+ * Rendered ONLY by the two Messages conversation pages. The booking and job pages link
+ * to it instead of embedding it, so a conversation is read in one place, in one
+ * layout — not buried under a payment card and a rating card.
+ */
 interface MessageThreadProps {
   bookingId: string;
   currentUserId: string;
@@ -66,12 +73,12 @@ export default function MessageThread({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           placeholder="Type a message..."
-          className="flex-1 rounded-lg border border-ink/15 px-3 py-2 text-sm"
+          className="flex-1 rounded-lg border border-ink/15 bg-transparent px-3 py-2 text-sm text-white placeholder:text-white/60 outline-none"
         />
         <button
           onClick={handleSend}
           disabled={sending}
-          className="rounded-lg bg-ink px-3 py-2 text-sm text-white hover:bg-ink/80 disabled:opacity-50"
+          className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
         >
           Send
         </button>

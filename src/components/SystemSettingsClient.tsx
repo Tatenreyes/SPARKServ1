@@ -65,7 +65,7 @@ export default function SystemSettingsClient({
       <div className="rounded-card border border-ink/8 bg-surface p-5 shadow-card">
         <p className="font-medium text-ink">Platform announcement</p>
         <p className="text-xs text-ink/50">
-          Shown as a banner on the customer dashboard. Leave blank to hide it.
+          Scrolled across the top bar of every dashboard. Leave blank to hide it.
         </p>
         <textarea
           rows={2}

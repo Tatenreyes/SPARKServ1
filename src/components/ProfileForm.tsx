@@ -121,16 +121,16 @@ export default function ProfileForm({ role }: ProfileFormProps) {
   if (loading) return <div className="rounded-2xl border border-line bg-surface p-8 text-sm text-muted">Loading profile...</div>;
 
   return (
-    <form onSubmit={saveProfile} className="max-w-2xl space-y-6 rounded-2xl border border-line bg-surface p-6 shadow-sm sm:p-8">
+    <form onSubmit={saveProfile} className="max-w-2xl space-y-6 rounded-2xl border border-line bg-surface p-6 text-white shadow-sm sm:p-8">
       <div className="flex items-center gap-5 border-b border-line pb-6">
         <div className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-brand-ink ring-4 ring-canvas">
           {profile.avatar_url ? <div className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${profile.avatar_url})` }} /> : <UserRound className="h-10 w-10" />}
           {uploading && <div className="absolute inset-0 flex items-center justify-center bg-canvas/70 text-white"><Loader2 className="h-6 w-6 animate-spin" /></div>}
         </div>
         <div>
-          <h2 className="font-display text-lg font-semibold text-ink">Profile picture</h2>
+          <h2 className="font-display text-lg font-semibold text-white">Profile picture</h2>
           <p className="mt-1 text-xs text-muted">Use a clear JPG, PNG, or WebP image up to 5 MB.</p>
-          <label className="mt-3 inline-flex cursor-pointer items-center rounded-lg border border-line px-3 py-2 text-xs font-semibold text-brand-ink transition hover:bg-brand-soft">
+          <label className="mt-3 inline-flex cursor-pointer items-center rounded-lg border border-line px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-soft">
             <Camera className="mr-2 h-4 w-4" /> {uploading ? "Uploading..." : "Upload photo"}
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadAvatar} disabled={uploading} className="sr-only" />
           </label>
@@ -147,10 +147,10 @@ export default function ProfileForm({ role }: ProfileFormProps) {
 
       {role === "technician" && technician && (
         <div className="border-t border-line pt-6">
-          <div className="mb-4 flex items-center gap-2"><Wrench className="h-4 w-4 text-brand-ink" /><h2 className="font-display text-lg font-semibold text-ink">Technician details</h2></div>
+          <div className="mb-4 flex items-center gap-2"><Wrench className="h-4 w-4 text-brand-ink" /><h2 className="font-display text-lg font-semibold text-white">Technician details</h2></div>
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-xs font-semibold text-ink/80">Specializations</label>
+              <label className="mb-1.5 block text-xs font-semibold text-white">Specializations</label>
               <div className="flex flex-wrap gap-2 rounded-lg border border-line bg-soft p-3">
                 {APPLIANCE_TYPES.map((appliance) => {
                   const selected = technician.specializations.includes(appliance);
@@ -174,10 +174,10 @@ export default function ProfileForm({ role }: ProfileFormProps) {
               <p className="mt-1 text-xs text-muted">Click an appliance to add or remove it from your specializations.</p>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-ink/80">Years of experience</label>
-              <input type="number" min="0" value={technician.experience_years} onChange={(event) => setTechnician({ ...technician, experience_years: Number(event.target.value) })} className="w-full rounded-lg border border-line bg-soft px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-line" />
+              <label className="mb-1.5 block text-xs font-semibold text-white">Years of experience</label>
+              <input type="number" min="0" value={technician.experience_years} onChange={(event) => setTechnician({ ...technician, experience_years: Number(event.target.value) })} className="w-full rounded-lg border border-line bg-soft px-3 py-2.5 text-sm text-white outline-none focus:border-brand-500 focus:ring-4 focus:ring-line" />
             </div>
-            <label className="flex items-center gap-3 self-end pb-2 text-sm font-medium text-ink/80">
+            <label className="flex items-center gap-3 self-end pb-2 text-sm font-medium text-white">
               <input type="checkbox" checked={technician.availability} onChange={(event) => setTechnician({ ...technician, availability: event.target.checked })} className="h-4 w-4 accent-brand-600" />
               Available for new jobs
             </label>
@@ -193,5 +193,5 @@ export default function ProfileForm({ role }: ProfileFormProps) {
 }
 
 function Field({ label, icon, value, onChange, placeholder, disabled, required }: { label: string; icon?: React.ReactNode; value: string; onChange?: (value: string) => void; placeholder?: string; disabled?: boolean; required?: boolean }) {
-  return <div><label className="mb-1.5 block text-xs font-semibold text-ink/80">{label}</label><div className="relative">{icon && <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted/80 [&>svg]:h-4 [&>svg]:w-4">{icon}</span>}<input required={required} disabled={disabled} value={value} onChange={(event) => onChange?.(event.target.value)} placeholder={placeholder} className={`w-full rounded-lg border border-line px-3 py-2.5 text-sm outline-none ${icon ? "pl-10" : ""} ${disabled ? "bg-soft text-muted" : "bg-soft focus:border-brand-500 focus:bg-surface focus:ring-4 focus:ring-line"}`} /></div></div>;
+  return <div><label className="mb-1.5 block text-xs font-semibold text-white">{label}</label><div className="relative">{icon && <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted/80 [&>svg]:h-4 [&>svg]:w-4">{icon}</span>}<input required={required} disabled={disabled} value={value} onChange={(event) => onChange?.(event.target.value)} placeholder={placeholder} className={`w-full rounded-lg border border-line px-3 py-2.5 text-sm text-white placeholder:text-white/60 outline-none ${icon ? "pl-10" : ""} ${disabled ? "bg-soft text-white/80" : "bg-soft focus:border-brand-500 focus:bg-surface focus:ring-4 focus:ring-line"}`} /></div></div>;
 }

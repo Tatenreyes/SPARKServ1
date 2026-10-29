@@ -40,6 +40,18 @@ export default async function CustomerMessagesPage() {
     if (!latestByBooking.has(m.booking_id)) latestByBooking.set(m.booking_id, m);
   }
 
+  // An inbox reads newest-conversation-first: the LAST message decides the order, and a
+  // job nobody has written about yet falls to the bottom instead of pushing a live
+  // conversation off the top.
+  const conversations = [...(bookings ?? [])].sort((a, b) => {
+    const aAt = latestByBooking.get(a.id)?.created_at;
+    const bAt = latestByBooking.get(b.id)?.created_at;
+    if (aAt && bAt) return bAt.localeCompare(aAt);
+    if (aAt) return -1;
+    if (bAt) return 1;
+    return new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime();
+  });
+
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold text-ink">Messages</h1>
@@ -49,13 +61,13 @@ export default async function CustomerMessagesPage() {
         <p className="mt-8 text-sm text-ink/50">No conversations yet — they start once you book a technician.</p>
       ) : (
         <div className="mt-6 space-y-2">
-          {bookings.map((b) => {
+          {conversations.map((b) => {
             const latest = latestByBooking.get(b.id);
             const req = requestMap.get(b.service_request_id);
             return (
               <Link
                 key={b.id}
-                href={`/customer/bookings/${b.id}`}
+                href={`/customer/messages/${b.id}`}
                 className="flex items-start gap-3 rounded-card border border-ink/8 bg-surface p-4 shadow-card transition hover:border-brand-300"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink">

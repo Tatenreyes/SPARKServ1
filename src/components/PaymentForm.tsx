@@ -19,13 +19,16 @@ const STATUS_COLOR: Record<string, string> = {
 export default function PaymentForm({
   bookingId,
   existingPayment,
+  amountDue = null,
 }: {
   bookingId: string;
   existingPayment: PaymentRow | null;
+  /** The exact amount the API will accept — the final cost, or the accepted estimate. */
+  amountDue?: number | null;
 }) {
   const router = useRouter();
   const [reference, setReference] = useState("");
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(amountDue != null ? amountDue.toFixed(2) : "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +77,21 @@ export default function PaymentForm({
             </span>
           </div>
           <p className="mt-1 text-xs text-ink/40">Ref: {existingPayment.gcash_reference}</p>
+
+          {/* A rejected reference is shown WITH its reason, and the form below
+              returns so the customer can submit a new one. The reason is
+              administrator-authored but customer-visible, so it is rendered as a
+              text node: React escapes it, and it is never treated as markup. */}
+          {existingPayment.status === "rejected" && existingPayment.rejection_reason && (
+            <div className="mt-2 rounded-lg bg-alert-soft px-3 py-2">
+              <p className="text-[11px] font-semibold text-alert-ink">
+                Why this reference was not accepted
+              </p>
+              <p className="mt-0.5 break-words text-xs leading-relaxed text-alert-ink">
+                {existingPayment.rejection_reason}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -93,13 +111,22 @@ export default function PaymentForm({
             min="0"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
+            readOnly={amountDue != null}
             placeholder="Amount paid (₱)"
-            className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
+            className={`w-full rounded-lg border border-ink/15 px-3 py-2 text-sm ${
+              amountDue != null ? "bg-soft text-muted" : ""
+            }`}
           />
+          {amountDue == null && (
+            <p className="text-xs text-warn-ink">
+              The technician has not recorded the final cost yet. Payment opens once
+              it is set.
+            </p>
+          )}
           {error && <p className="text-xs text-alert-ink">{error}</p>}
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || amountDue == null}
             className="rounded-full bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
           >
             {submitting ? "Submitting..." : "Submit payment reference"}

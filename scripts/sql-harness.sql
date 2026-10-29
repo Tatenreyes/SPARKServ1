@@ -25,6 +25,11 @@ begin
   if not exists (select 1 from pg_roles where rolname = 'service_role') then
     create role service_role nologin;
   end if;
+  -- Supabase creates service_role with BYPASSRLS ("allow developers to create
+  -- JWT's that bypass their policies" - supabase/postgres init-schema). The stub
+  -- must match, or a test that impersonates service_role would measure RLS
+  -- instead of the table privilege it is meant to be testing.
+  alter role service_role bypassrls;
 end
 $roles$;
 

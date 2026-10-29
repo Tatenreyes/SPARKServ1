@@ -1,14 +1,39 @@
 "use client";
 
-import { useState } from "react";
+/**
+ * The customer's estimate list, grouped by request.
+ *
+ * The CURRENT version of each request is shown in full (the shared
+ * EstimateReviewCard), and every earlier version is available underneath it as
+ * history — a revision never destroys what was already reviewed.
+ *
+ * Drafts cannot appear here: RLS hides `draft` rows from customers, and the page
+ * only asks for what it may read.
+ */
+
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import EstimateReviewCard from "@/components/EstimateReviewCard";
+import { isCompletedRequestStatus, isOpenEstimateStatus } from "@/lib/estimate-costs";
 import type { EstimateRow } from "@/types/database";
-import StatusBadge from "@/components/StatusBadge";
 
 interface RequestInfo {
   id: string;
   appliance_type: string;
   problem_description: string;
+  /**
+   * The request's assignment state. The card needs it because an approved estimate
+   * alone is not enough to book: the technician has to have ACCEPTED the request, and
+   * a form that cannot succeed is worse than an explanation.
+   */
+  assignment_status: string;
+  /**
+   * The request's lifecycle state. Also needed for the same reason, one step later:
+   * a repair that is already booked, under way, finished or cancelled cannot be
+   * booked again, and this page uses it to keep finished repairs out of the list of
+   * work in progress.
+   */
+  status: string;
 }
 
 export default function EstimatesClient({
@@ -19,134 +44,88 @@ export default function EstimatesClient({
   requestInfo: Record<string, RequestInfo>;
 }) {
   const router = useRouter();
-  const [estimates, setEstimates] = useState(initialEstimates);
-  const [schedulingId, setSchedulingId] = useState<string | null>(null);
-  const [scheduledAt, setScheduledAt] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  async function handleAccept(est: EstimateRow) {
-    if (!scheduledAt) {
-      setError("Pick a date and time first.");
-      return;
-    }
-    setBusyId(est.id);
-    setError(null);
-    try {
-      const res = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          service_request_id: est.service_request_id,
-          technician_id: est.technician_id,
-          estimate_id: est.id,
-          scheduled_at: new Date(scheduledAt).toISOString(),
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
-      router.push(`/customer/bookings/${json.data.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to book this estimate");
-    } finally {
-      setBusyId(null);
-    }
+  /** Newest first, and only versions the customer is allowed to see. */
+  const visible = initialEstimates
+    .filter((estimate) => estimate.status !== "draft")
+    .sort((a, b) => {
+      if (a.service_request_id !== b.service_request_id) return 0;
+      return b.version - a.version;
+    });
+
+  const byRequest = new Map<string, EstimateRow[]>();
+  for (const estimate of visible) {
+    const list = byRequest.get(estimate.service_request_id) ?? [];
+    // A request/version is one customer-facing estimate. Keep the newest row
+    // when legacy or retried submissions created duplicate rows with the same
+    // version, otherwise the customer sees the same card twice.
+    if (list.some((existing) => existing.version === estimate.version)) continue;
+    list.push(estimate);
+    byRequest.set(estimate.service_request_id, list);
   }
 
-  async function handleReject(id: string) {
-    setBusyId(id);
-    setError(null);
-    try {
-      const res = await fetch(`/api/estimates/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "rejected" }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
-      setEstimates((prev) => prev.map((e) => (e.id === id ? json.data : e)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reject estimate");
-    } finally {
-      setBusyId(null);
-    }
+  if (!visible.length) {
+    return (
+      <p className="mt-6 text-sm text-ink/50">
+        No estimates yet. Your technician sends one after accepting your request.
+      </p>
+    );
   }
 
-  if (!estimates.length) {
-    return <p className="mt-6 text-sm text-ink/50">No estimates yet.</p>;
+  /** One card per request: the version that still matters, earlier versions behind it. */
+  function cardFor(requestId: string, versions: EstimateRow[]) {
+    const newest = versions[0];
+    const current =
+      versions.find((estimate) => isOpenEstimateStatus(estimate.status)) ??
+      versions.find((estimate) => estimate.status === "accepted") ??
+      newest;
+    const history = versions.filter((estimate) => estimate.id !== current.id);
+
+    return (
+      <div key={requestId}>
+        {/* The card refreshes the server component itself after a decision, so no
+            local copy of the list is kept — that is what stops a stale row from
+            offering a second decision. */}
+        <EstimateReviewCard
+          estimate={current}
+          history={history}
+          request={requestInfo[requestId] ?? null}
+          onChanged={() => router.refresh()}
+        />
+      </div>
+    );
+  }
+
+  // A completed repair's estimate has MOVED to Service history. It is the record of a
+  // finished job, not something to review, and leaving it among the estimates that
+  // still want a decision is what made finished work look like an open one.
+  //
+  // A CANCELLED request keeps its estimate: nothing was repaired, so Service history
+  // has no row to carry the quote, and the card itself explains that no appointment
+  // can be booked from it.
+  const groups = [...byRequest.entries()].filter(
+    ([requestId]) => !isCompletedRequestStatus(requestInfo[requestId]?.status)
+  );
+
+  if (!groups.length) {
+    return (
+      <p className="mt-6 text-sm text-ink/50">
+        Nothing to review. Your finished repairs and the estimates they were approved at
+        are in{" "}
+        <Link
+          href="/customer/repair-history"
+          className="font-semibold text-brand-ink hover:underline"
+        >
+          Repair history
+        </Link>
+        .
+      </p>
+    );
   }
 
   return (
-    <div className="mt-6 space-y-4">
-      {error && <p className="text-sm text-alert-ink">{error}</p>}
-      {estimates.map((est) => {
-        const request = requestInfo[est.service_request_id];
-        const isScheduling = schedulingId === est.id;
-        return (
-          <div key={est.id} className="rounded-card border border-ink/8 bg-surface p-5 shadow-card">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium capitalize text-ink/50">
-                {request?.appliance_type.replace("_", " ") ?? "Repair"}
-              </p>
-              <StatusBadge status={est.status} />
-            </div>
-
-            <p className="mt-2 font-display text-2xl font-semibold text-ink">
-              ₱{est.estimated_cost.toFixed(2)}
-            </p>
-            {request?.problem_description && (
-              <p className="mt-1 text-sm text-ink/60">{request.problem_description}</p>
-            )}
-            {est.notes && (
-              <p className="mt-2 rounded-lg bg-canvas px-3 py-2 text-sm text-ink/65">{est.notes}</p>
-            )}
-
-            {est.status === "pending" && (
-              <div className="mt-4 space-y-2">
-                {isScheduling ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="datetime-local"
-                      value={scheduledAt}
-                      onChange={(e) => setScheduledAt(e.target.value)}
-                      className="rounded-lg border border-ink/15 px-3 py-2 text-sm"
-                    />
-                    <button
-                      onClick={() => handleAccept(est)}
-                      disabled={busyId === est.id}
-                      className="rounded-full bg-signal-500 px-4 py-2 text-sm font-semibold text-white hover:bg-signal-600 disabled:opacity-50"
-                    >
-                      {busyId === est.id ? "Booking..." : "Confirm booking"}
-                    </button>
-                    <button
-                      onClick={() => setSchedulingId(null)}
-                      className="text-sm font-medium text-ink/50 hover:text-ink"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setSchedulingId(est.id)}
-                      className="flex-1 rounded-full bg-signal-500 px-4 py-2 text-sm font-semibold text-white hover:bg-signal-600"
-                    >
-                      Accept estimate
-                    </button>
-                    <button
-                      onClick={() => handleReject(est.id)}
-                      disabled={busyId === est.id}
-                      className="flex-1 rounded-full border border-alert-500/30 px-4 py-2 text-sm font-semibold text-alert-ink hover:bg-alert-soft disabled:opacity-50"
-                    >
-                      {busyId === est.id ? "..." : "Reject"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
+    <div className="mt-6 space-y-8">
+      {groups.map(([requestId, versions]) => cardFor(requestId, versions))}
     </div>
   );
 }

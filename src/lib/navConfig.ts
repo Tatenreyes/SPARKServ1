@@ -5,6 +5,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   Headset,
+  Home,
   LayoutDashboard,
   LifeBuoy,
   ListOrdered,
@@ -17,6 +18,7 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { SidebarNavItem } from "@/components/Sidebar";
 import type { UserRole } from "@/types/database";
 
@@ -55,7 +57,6 @@ export function navForRole(role: UserRole): SidebarNavItem[] {
         { label: "Job Monitoring", href: "/admin/job-monitoring", icon: Timer },
         { label: "Technicians", href: "/admin/technicians", icon: Users },
         { label: "User Management", href: "/admin/users", icon: UserRound },
-        { label: "Booking Review", href: "/admin/bookings", icon: CalendarClock },
         { label: "Support Tickets", href: "/admin/support-tickets", icon: Headset },
         { label: "Transactions", href: "/admin/payments", icon: CircleDollarSign },
       ];
@@ -66,6 +67,11 @@ export function navForRole(role: UserRole): SidebarNavItem[] {
         { label: "Administrators", href: "/superadmin/admins", icon: ShieldCheck },
         { label: "Technicians", href: "/admin/technicians", icon: Users },
         { label: "All Users", href: "/admin/users", icon: UserRound },
+        // Verifying a GCash reference is what completes a repair, and /admin is
+        // reachable for a super_admin — but without this entry there was no link to
+        // it anywhere in this navigation, so the only way to finish a repair was to
+        // type the URL.
+        { label: "Transactions", href: "/admin/payments", icon: CircleDollarSign },
         { label: "Activity Log", href: "/superadmin/activity", icon: Activity },
         { label: "System Settings", href: "/superadmin/settings", icon: Settings },
       ];
@@ -96,4 +102,170 @@ export function navForRole(role: UserRole): SidebarNavItem[] {
         },
       ];
   }
+}
+
+/** One destination in the mobile bottom navigation. */
+export interface BottomNavItem {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  /**
+   * Additional route prefixes that should keep this tab highlighted.
+   *
+   * A tab points at a section hub, but the section's real pages live under
+   * different paths (`/customer/estimates`, `/customer/bookings`, …). Without
+   * this, opening an estimate would light no tab at all and the phone would lose
+   * its sense of place. Routes are matched by prefix, longest first — see
+   * `MobileBottomNav`.
+   */
+  alsoMatches?: string[];
+}
+
+/**
+ * The four primary destinations for the mobile bottom navigation.
+ *
+ * Deliberately four, and deliberately not the full sidebar: a bottom bar is a
+ * thumb-reachable shortcut, and every extra tab shrinks the tap target until it
+ * stops being reachable. Everything else stays one tap deeper, through its
+ * section hub, or in the slide-out drawer behind the hamburger.
+ *
+ * Role-specific because the four things a customer, a technician and an
+ * administrator need at a glance are genuinely different jobs.
+ */
+export function bottomNavForRole(role: UserRole): BottomNavItem[] {
+  switch (role) {
+    case "technician":
+      return [
+        {
+          label: "Home",
+          href: "/technician/dashboard",
+          icon: Home,
+          alsoMatches: ["/technician/dashboard"],
+        },
+        {
+          label: "Jobs",
+          href: "/technician/jobs",
+          icon: Wrench,
+          alsoMatches: ["/technician/jobs", "/technician/estimate-requests"],
+        },
+        {
+          label: "Schedule",
+          href: "/technician/queue",
+          icon: CalendarClock,
+          alsoMatches: ["/technician/queue", "/technician/bookings"],
+        },
+        {
+          label: "Me",
+          href: "/technician/profile",
+          icon: UserRound,
+          alsoMatches: ["/technician/profile", "/technician/messages"],
+        },
+      ];
+
+    case "admin":
+      return [
+        { label: "Home", href: "/admin/dashboard", icon: Home },
+        {
+          label: "Repairs",
+          href: "/admin/progress",
+          icon: Activity,
+          alsoMatches: [
+            "/admin/progress",
+            "/admin/job-monitoring",
+            "/admin/bookings",
+          ],
+        },
+        {
+          label: "Queue",
+          href: "/admin/technician-queue",
+          icon: ListOrdered,
+          alsoMatches: ["/admin/technician-queue", "/admin/technicians"],
+        },
+        {
+          label: "Payments",
+          href: "/admin/payments",
+          icon: CircleDollarSign,
+          alsoMatches: ["/admin/payments"],
+        },
+      ];
+
+    case "super_admin":
+      return [
+        { label: "Home", href: "/superadmin/dashboard", icon: Home },
+        {
+          label: "Admins",
+          href: "/superadmin/admins",
+          icon: ShieldCheck,
+          alsoMatches: ["/superadmin/admins"],
+        },
+        {
+          label: "Payments",
+          href: "/admin/payments",
+          icon: CircleDollarSign,
+          alsoMatches: ["/admin/payments"],
+        },
+        {
+          label: "Audit",
+          href: "/superadmin/activity",
+          icon: Activity,
+          alsoMatches: ["/superadmin/activity"],
+        },
+        {
+          label: "Settings",
+          href: "/superadmin/settings",
+          icon: Settings,
+          alsoMatches: ["/superadmin/settings"],
+        },
+      ];
+
+    case "customer":
+    default:
+      return [
+        { label: "Home", href: "/customer/dashboard", icon: Home },
+        {
+          label: "Repairs",
+          href: "/customer/repairs",
+          icon: Wrench,
+          alsoMatches: [
+            "/customer/repairs",
+            "/customer/request-repair",
+            "/customer/service-request",
+            "/customer/estimates",
+            "/customer/bookings",
+            "/customer/progress-tracking",
+            "/customer/repair-history",
+          ],
+        },
+        {
+          label: "Support",
+          href: "/customer/support",
+          icon: LifeBuoy,
+          alsoMatches: ["/customer/support", "/customer/messages"],
+        },
+        {
+          label: "Me",
+          href: "/customer/account",
+          icon: UserRound,
+          alsoMatches: ["/customer/account", "/customer/appliances", "/customer/profile"],
+        },
+      ];
+  }
+}
+
+/**
+ * Routes that own the bottom of the phone screen themselves with a sticky
+ * primary action, so the bottom navigation steps aside.
+ *
+ * Two fixed bars stacked on a phone spend roughly 120px of a ~700px viewport —
+ * more than a sixth of the screen — and the submit button is the one control
+ * that must never compete with a tab bar for attention. The content column swaps
+ * its bottom-navigation clearance for the taller sticky-action clearance on the
+ * same condition, so nothing is either hidden or left with a dead gap.
+ */
+const IMMERSIVE_ROUTES = ["/customer/request-repair"];
+
+export function isImmersiveRoute(pathname: string): boolean {
+  return IMMERSIVE_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
 }

@@ -1,0 +1,60 @@
+-- =========================================================
+-- Migration: the two appliances columns no applied file ever added
+-- ---------------------------------------------------------
+-- WHY THIS FILE EXISTS
+-- `appliances` has been extended three times, and one of those extensions could
+-- not reach this database:
+--
+--   * migration_appliances_tickets.sql created the table with
+--     name, appliance_type, brand, model, purchase_date, notes.
+--   * migration_sync_live_schema.sql (the pre-queue sync) added exactly four
+--     more: model_number, serial_number, warranty_status, warranty_expiry_date.
+--   * migration_appliance_centric_flow.sql adds the REST —
+--     warranty_type and warranty_proof_url among them — but it early-returns:
+--
+--       if exists (select 1 ... service_requests.problem_description) then
+--         raise notice 'service_requests is already appliance-centric — skipping';
+--         return;              -- <-- returns BEFORE touching appliances
+--       end if;
+--
+-- A live database that is already appliance-centric therefore skips the whole
+-- file, and the two columns it would have added are never created. Nothing
+-- notices, because `supabase/schema.sql` (the fresh-install path) HAS them, so
+-- the app's own type definitions and every test keep passing — while the live
+-- database answers
+--
+--   PGRST204  Could not find the 'warranty_type' column of 'appliances'
+--             in the schema cache
+--
+-- to every appliance the customer tries to save. `POST /api/appliances` writes
+-- both columns, and the customer's appliance form has a "Warranty Type" field,
+-- so this is a hard failure, not a cosmetic gap.
+--
+-- WHY NOT JUST RE-RUN migration_appliance_centric_flow.sql
+--   It would skip again for the reason above. Removing that guard would be far
+--   worse: the file also rebuilds `service_requests` (create table ..._new, copy,
+--   `drop table public.service_requests cascade`), which silently drops the
+--   foreign keys held by estimates, bookings and technician_offer_history. This
+--   file only ADDS the two missing columns.
+--
+-- Idempotent: `add column if not exists` is a no-op once they are there, so it is
+-- safe to re-run and safe on a database that already has them.
+-- =========================================================
+
+alter table public.appliances
+  add column if not exists warranty_type text,
+  add column if not exists warranty_proof_url text;
+
+-- ---------- Verify ----------
+-- Run this afterwards; expect two rows, both is_nullable = 'YES':
+--
+--   select column_name, data_type, is_nullable
+--   from information_schema.columns
+--   where table_schema = 'public'
+--     and table_name = 'appliances'
+--     and column_name in ('warranty_type', 'warranty_proof_url')
+--   order by column_name;
+--
+-- Both are nullable on purpose: a warranty is often unknown at registration
+-- time, and `warranty_status` (yes/no/unknown) already carries that meaning.
+-- `supabase/schema.sql` declares them exactly the same way.

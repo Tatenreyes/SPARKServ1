@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getCurrentUser, AuthError } from "@/lib/auth";
 
 // POST /api/payments — customer submits a GCash payment reference for their own booking.
@@ -42,18 +42,62 @@ export async function POST(request: NextRequest) {
 
     const { data: booking, error: bookingError } = await supabase
       .from("bookings")
-      .select("id, customer_id, status, final_cost")
+      .select("id, customer_id, status, final_cost, service_request_id")
       .eq("id", booking_id)
       .single();
 
     if (bookingError || !booking || booking.customer_id !== user.id) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
-    if (booking.status !== "completed" || booking.final_cost == null) {
-      return NextResponse.json({ error: "Payment is only available after inspection" }, { status: 409 });
+
+    if (booking.status !== "awaiting_payment" && booking.status !== "completed") {
+      return NextResponse.json(
+        {
+          error:
+            "You can submit payment once you have inspected the repair and confirmed it. If the repair is already complete, ask an administrator to check the booking.",
+        },
+        { status: 409 }
+      );
     }
-    if (Number(amount) !== Number(booking.final_cost)) {
-      return NextResponse.json({ error: "Payment amount must match the final cost" }, { status: 400 });
+
+    // The technician records `final_cost` when marking the repair complete. A
+    // legacy booking may still have it null, so fall back to the accepted
+    // estimate — the same amount the customer dashboard shows — and persist it.
+    let amountDue = booking.final_cost;
+    if (amountDue == null) {
+      const { data: acceptedEstimate } = await supabase
+        .from("estimates")
+        .select("estimated_cost")
+        .eq("service_request_id", booking.service_request_id)
+        .eq("status", "accepted")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!acceptedEstimate) {
+        return NextResponse.json(
+          {
+            error:
+              "The technician has not recorded the final repair cost yet. Please ask them to set it before paying.",
+          },
+          { status: 409 }
+        );
+      }
+
+      amountDue = acceptedEstimate.estimated_cost;
+      await createServiceRoleClient()
+        .from("bookings")
+        .update({ final_cost: amountDue })
+        .eq("id", booking.id);
+    }
+
+    if (Number(amount) !== Number(amountDue)) {
+      return NextResponse.json(
+        {
+          error: `Payment amount must match the final cost (₱${Number(amountDue).toFixed(2)}).`,
+        },
+        { status: 400 }
+      );
     }
 
     const { data: existingPayment } = await supabase

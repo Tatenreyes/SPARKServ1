@@ -1,0 +1,29 @@
+-- =========================================================
+-- Migration: booking_status gains 'awaiting_payment' (STEP 1 of 2)
+-- ---------------------------------------------------------
+-- WHY THIS FILE EXISTS
+-- The repair transaction must not close until the customer's external payment
+-- has been verified by an administrator. That needs one honest state between
+-- "the customer inspected the repair and accepted it" and "completed":
+--
+--   pending → in_progress → awaiting_inspection → awaiting_payment → completed
+--                                                    ↑ customer pays,
+--                                                      an administrator verifies
+--
+-- It belongs in the EXISTING `booking_status` enum. A second status column, or a
+-- separate payment-stage table, would be a duplicate status system that the
+-- estimate, booking, payment and history readers would each have to reconcile —
+-- the audit's "one vocabulary per concern" rule.
+--
+-- WHY THIS IS A SEPARATE FILE
+--   PostgreSQL refuses to *use* an enum value in the same transaction that adds
+--   it ("unsafe use of new value"). The enforcement migration that follows
+--   references 'awaiting_payment' in a policy predicate and in trigger bodies, so
+--   the value must be committed first. Apply this file, then
+--   `migration_rls_workflow_enforcement.sql`.
+--
+-- Safe to run more than once (`add value if not exists`), and safe on a database
+-- where the value is already present.
+-- =========================================================
+
+alter type public.booking_status add value if not exists 'awaiting_payment';

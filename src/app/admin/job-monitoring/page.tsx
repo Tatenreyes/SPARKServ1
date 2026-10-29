@@ -1,40 +1,56 @@
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { directionsUrlForRequest } from "@/lib/geo";
 import StatusBadge from "@/components/StatusBadge";
+import { isActiveBookingStatus } from "@/lib/booking-status";
+import { requireRows } from "@/lib/query-rows";
+import { Navigation } from "lucide-react";
 
 export default async function AdminJobMonitoringPage() {
   const supabase = createServiceRoleClient();
 
-  const { data: bookings } = await supabase
+  // Every read below is guarded by `requireRows()`: a failed SELECT raises
+  // instead of rendering as "No bookings yet." — see src/lib/query-rows.ts.
+  const bookingsResult = await supabase
     .from("bookings")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(50);
+  const bookings = requireRows("bookings", bookingsResult.data, bookingsResult.error);
 
-  const requestIds = Array.from(new Set((bookings ?? []).map((b) => b.service_request_id)));
-  const { data: requests } = requestIds.length
+  const requestIds = Array.from(new Set(bookings.map((b) => b.service_request_id)));
+  const requestsResult = requestIds.length
     ? await supabase.from("service_requests").select("*").in("id", requestIds)
-    : { data: [] };
-  const requestMap = new Map((requests ?? []).map((r) => [r.id, r]));
+    : null;
+  const requests = requestsResult
+    ? requireRows("service requests", requestsResult.data, requestsResult.error)
+    : [];
+  const requestMap = new Map(requests.map((r) => [r.id, r]));
 
   const userIds = Array.from(
-    new Set((bookings ?? []).flatMap((b) => [b.customer_id, b.technician_id]))
+    new Set(bookings.flatMap((b) => [b.customer_id, b.technician_id]))
   );
-  const { data: users } = userIds.length
+  const usersResult = userIds.length
     ? await supabase.from("users").select("id, name").in("id", userIds)
-    : { data: [] };
-  const userMap = new Map((users ?? []).map((u) => [u.id, u.name]));
+    : null;
+  const users = usersResult
+    ? requireRows("customer names", usersResult.data, usersResult.error)
+    : [];
+  const userMap = new Map(users.map((u) => [u.id, u.name]));
 
-  const bookingIds = (bookings ?? []).map((b) => b.id);
-  const { data: ratings } = bookingIds.length
+  const bookingIds = bookings.map((b) => b.id);
+  const ratingsResult = bookingIds.length
     ? await supabase.from("ratings").select("booking_id, rating").in("booking_id", bookingIds)
-    : { data: [] };
-  const ratingMap = new Map((ratings ?? []).map((r) => [r.booking_id, r.rating]));
+    : null;
+  const ratings = ratingsResult
+    ? requireRows("ratings", ratingsResult.data, ratingsResult.error)
+    : [];
+  const ratingMap = new Map(ratings.map((r) => [r.booking_id, r.rating]));
 
-  const activeCount = (bookings ?? []).filter(
-    (b) => b.status === "pending" || b.status === "in_progress" || b.status === "awaiting_inspection"
-  ).length;
-  const completedCount = (bookings ?? []).filter((b) => b.status === "completed").length;
-  const avgRating = ratings?.length
+  // One definition of "active" for the whole workspace, so this tile and
+  // /admin/progress cannot disagree (src/lib/booking-status.ts).
+  const activeCount = bookings.filter((b) => isActiveBookingStatus(b.status)).length;
+  const completedCount = bookings.filter((b) => b.status === "completed").length;
+  const avgRating = ratings.length
     ? (ratings.reduce((s, r) => s + r.rating, 0) / ratings.length).toFixed(1)
     : "—";
 
@@ -57,15 +73,16 @@ export default async function AdminJobMonitoringPage() {
               <th className="px-4 py-3 font-medium">Customer</th>
               <th className="px-4 py-3 font-medium">Appliance</th>
               <th className="px-4 py-3 font-medium">Technician</th>
+              <th className="px-4 py-3 font-medium">Final cost</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Location</th>
               <th className="px-4 py-3 font-medium">Rating</th>
             </tr>
           </thead>
           <tbody>
-            {!bookings?.length ? (
+            {!bookings.length ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-sm text-ink/40">
+                <td colSpan={8} className="px-4 py-6 text-center text-sm text-ink/40">
                   No bookings yet.
                 </td>
               </tr>
@@ -73,6 +90,13 @@ export default async function AdminJobMonitoringPage() {
               bookings.map((b) => {
                 const r = requestMap.get(b.service_request_id);
                 const rating = ratingMap.get(b.id);
+                const directionsUrl = r
+                  ? directionsUrlForRequest({
+                      latitude: r.latitude,
+                      longitude: r.longitude,
+                      location: r.location,
+                    })
+                  : null;
                 return (
                   <tr key={b.id} className="border-b border-ink/5 last:border-0">
                     <td className="px-4 py-3 font-mono text-xs text-ink/50">
@@ -83,10 +107,32 @@ export default async function AdminJobMonitoringPage() {
                       {r?.appliance_type.replace("_", " ") ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-ink/70">{userMap.get(b.technician_id) ?? "—"}</td>
+                    <td className="px-4 py-3 text-ink/70">
+                      {b.final_cost != null ? `₱${b.final_cost.toFixed(2)}` : "—"}
+                    </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={b.status} />
                     </td>
-                    <td className="px-4 py-3 text-xs text-ink/50">{r?.location}</td>
+                    <td className="px-4 py-3 text-xs text-ink/50">
+                      <span className="block max-w-[16rem] break-words">{r?.location ?? "—"}</span>
+                      {r?.latitude != null && r?.longitude != null && (
+                        <span className="mt-0.5 block font-mono text-[10px] text-ink/35">
+                          {r.latitude.toFixed(6)}, {r.longitude.toFixed(6)}
+                        </span>
+                      )}
+                      {/* Administrators already see every request; this link
+                          spares them copying coordinates by hand. */}
+                      {directionsUrl && (
+                        <a
+                          href={directionsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-brand-ink hover:underline"
+                        >
+                          <Navigation className="h-3 w-3" aria-hidden="true" /> Directions
+                        </a>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-xs text-ink/50">
                       {rating != null ? `★ ${rating}/5` : "—"}
                     </td>

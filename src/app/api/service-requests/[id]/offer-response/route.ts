@@ -63,6 +63,20 @@ export async function POST(
       reason: typeof reason === "string" && reason.trim() ? reason.trim() : null,
     });
 
+    // The request was withdrawn (or already finished) before the technician
+    // answered: the engine refused the response and released the offer. 409 with
+    // the reason, so the technician is told instead of watching the card vanish.
+    if (outcome.outcome === "cancelled") {
+      return NextResponse.json(
+        {
+          error:
+            "This request was cancelled by the customer, so the offer could not be accepted. It has been released.",
+          outcome,
+        },
+        { status: 409 }
+      );
+    }
+
     if (outcome.outcome === "accepted") {
       await notify(supabase, {
         userId: serviceRequest.customer_id,

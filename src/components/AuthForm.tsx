@@ -6,9 +6,42 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import LoadingScreen from "@/components/LoadingScreen";
 import { Eye, EyeOff, UserRoundCog, Wrench, Lock, Mail, User } from "lucide-react";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/password";
 
 interface AuthFormProps {
   mode: "login" | "register";
+}
+
+/**
+ * Fallback for the Suspense boundary every caller of `AuthForm` must provide.
+ *
+ * `AuthForm` reads `?redirectTo=` through `useSearchParams()`, which opts the
+ * route out of static rendering unless the component is wrapped in Suspense. The
+ * root layout used to carry `force-dynamic`, which hid that requirement by
+ * making the whole site dynamic; with it removed the boundary is load-bearing.
+ *
+ * It mirrors the form's box so the swap does not shift the layout: same
+ * `max-w-[420px]` column, same heading block, then `rows` input-sized rows —
+ * three for login, more for the taller registration form.
+ */
+export function AuthFormSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="w-full max-w-[420px]" aria-hidden="true">
+      <div className="mb-8">
+        <div className="h-8 w-56 animate-pulse rounded-lg bg-soft" />
+        <div className="mt-3 h-4 w-72 animate-pulse rounded bg-soft" />
+      </div>
+      <div className="space-y-5">
+        {Array.from({ length: rows }, (_, row) => (
+          <div key={row} className="space-y-1.5">
+            <div className="h-4 w-28 animate-pulse rounded bg-soft" />
+            <div className="h-11 w-full animate-pulse rounded-xl bg-soft" />
+          </div>
+        ))}
+        <div className="h-12 w-full animate-pulse rounded-xl bg-soft" />
+      </div>
+    </div>
+  );
 }
 
 export default function AuthForm({ mode }: AuthFormProps) {
@@ -127,6 +160,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               <input
                 id={nameId}
                 required
+                autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink/30 transition-all duration-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
@@ -144,28 +178,42 @@ export default function AuthForm({ mode }: AuthFormProps) {
               id={emailId}
               required
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink/30 transition-all duration-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
-              placeholder="you@example.com"
+              placeholder="Enter your email"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor={passwordId} className="flex items-center gap-2 text-sm font-semibold text-ink/80">
-              <Lock className="h-4 w-4 text-ink/40" />
-              Password
-            </label>
+            {/* The label and the "Forgot password?" link share one row: the link
+                is login-only, and the password field itself is unchanged. */}
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor={passwordId} className="flex items-center gap-2 text-sm font-semibold text-ink/80">
+                <Lock className="h-4 w-4 text-ink/40" />
+                Password
+              </label>
+              {mode === "login" && (
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-semibold text-brand-ink underline-offset-4 transition-colors hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              )}
+            </div>
             <div className="relative">
               <input
                 id={passwordId}
                 required
                 type={showPassword ? "text" : "password"}
-                minLength={6}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                minLength={MIN_PASSWORD_LENGTH}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 pr-10 text-sm text-ink placeholder:text-ink/30 transition-all duration-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
-                placeholder="••••••••"
+                placeholder="Enter your password"
               />
               <button
                 type="button"
@@ -177,16 +225,17 @@ export default function AuthForm({ mode }: AuthFormProps) {
               </button>
             </div>
             {mode === "register" && (
-              <p className="text-xs text-ink/40">Must be at least 6 characters</p>
+              <p className="text-xs text-ink/40">{PASSWORD_HINT}</p>
             )}
           </div>
 
           {mode === "register" && (
             <div className="space-y-2.5">
-              <label className="text-sm font-semibold text-ink/80">I am a...</label>
+              <p className="text-sm font-semibold text-ink/80">Choose account type</p>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
+                  aria-pressed={role === "customer"}
                   onClick={() => setRole("customer")}
                   className={`flex flex-col items-center justify-center gap-2.5 rounded-xl border-2 p-4 transition-all duration-200 ${
                     role === "customer"
@@ -209,6 +258,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
                 <button
                   type="button"
+                  aria-pressed={role === "technician"}
                   onClick={() => setRole("technician")}
                   className={`flex flex-col items-center justify-center gap-2.5 rounded-xl border-2 p-4 transition-all duration-200 ${
                     role === "technician"
@@ -250,7 +300,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                     type="checkbox"
                     checked={agreedToPolicy}
                     onChange={(e) => setAgreedToPolicy(e.target.checked)}
-                    className="peer h-4.5 w-4.5 appearance-none rounded-md border border-ink/20 checked:border-brand-500 checked:bg-brand-500 transition-all duration-200 cursor-pointer"
+                    className="peer h-5 w-5 shrink-0 appearance-none rounded-md border-2 border-muted bg-surface checked:border-brand-600 checked:bg-brand-600 transition-colors duration-200 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
                   />
                   <svg className="absolute left-0.5 top-0.5 h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
@@ -273,7 +323,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                     type="checkbox"
                     checked={agreedToPrivacy}
                     onChange={(e) => setAgreedToPrivacy(e.target.checked)}
-                    className="peer h-4.5 w-4.5 appearance-none rounded-md border border-ink/20 checked:border-brand-500 checked:bg-brand-500 transition-all duration-200 cursor-pointer"
+                    className="peer h-5 w-5 shrink-0 appearance-none rounded-md border-2 border-muted bg-surface checked:border-brand-600 checked:bg-brand-600 transition-colors duration-200 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
                   />
                   <svg className="absolute left-0.5 top-0.5 h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
@@ -282,7 +332,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                 <span className="text-xs text-ink/70 leading-relaxed">
                   I acknowledge the{" "}
                   <Link
-                    href="/policies/customer"
+                    href="/policies/privacy"
                     target="_blank"
                     className="font-semibold text-brand-ink hover:text-brand-ink underline underline-offset-2"
                   >
@@ -294,13 +344,13 @@ export default function AuthForm({ mode }: AuthFormProps) {
           )}
 
           {error && (
-            <div className="flex items-start gap-2.5 rounded-xl bg-alert-soft px-4 py-3 text-sm text-alert-ink">
-              <svg className="h-4.5 w-4.5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <div role="alert" className="flex min-w-0 items-start gap-2.5 rounded-xl bg-alert-soft px-4 py-3 text-sm text-alert-ink">
+              <svg className="mt-0.5 h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
-              <span className="leading-relaxed">{error}</span>
+              <span className="min-w-0 flex-1 leading-relaxed">{error}</span>
             </div>
           )}
 

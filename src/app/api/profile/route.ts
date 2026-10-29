@@ -29,9 +29,16 @@ export async function PATCH(request: NextRequest) {
     if (!user) throw new AuthError("Not authenticated", 401);
 
     const body = await request.json();
-    const userUpdate = {
-      first_name: typeof body.first_name === "string" ? body.first_name.trim() : user.first_name,
-      last_name: typeof body.last_name === "string" ? body.last_name.trim() : user.last_name,
+    const userUpdate: {
+      first_name: string | null;
+      last_name: string | null;
+      middle_initial: string | null;
+      phone: string | null;
+      address: string | null;
+      name?: string;
+    } = {
+      first_name: typeof body.first_name === "string" ? body.first_name.trim() || null : user.first_name,
+      last_name: typeof body.last_name === "string" ? body.last_name.trim() || null : user.last_name,
       middle_initial: typeof body.middle_initial === "string" ? body.middle_initial.trim() || null : user.middle_initial,
       phone: typeof body.phone === "string" ? body.phone.trim() || null : user.phone,
       address: typeof body.address === "string" ? body.address.trim() || null : user.address,
@@ -40,6 +47,21 @@ export async function PATCH(request: NextRequest) {
     if (!userUpdate.first_name && !userUpdate.last_name) {
       return NextResponse.json({ error: "First name or last name is required" }, { status: 400 });
     }
+
+    // `users.name` is what the rest of the app displays — both dashboards, the
+    // technician queue, technician cards, the admin user list — while this form
+    // edits the split first/last/middle fields. Writing only those would save the
+    // new name and then keep showing the old one everywhere else, so `name` is
+    // recomposed here. It is left out of the update entirely when there is
+    // nothing to compose, so a legacy row with no name fields keeps its name.
+    const composedName = [
+      userUpdate.first_name,
+      userUpdate.middle_initial ? `${userUpdate.middle_initial.replace(/\.$/, "")}.` : null,
+      userUpdate.last_name,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    if (composedName) userUpdate.name = composedName;
 
     const supabase = createClient();
     const { data, error } = await supabase.from("users").update(userUpdate).eq("id", user.id).select("*").single();

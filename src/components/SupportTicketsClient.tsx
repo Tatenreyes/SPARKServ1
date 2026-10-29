@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import type { SupportTicketRow, TicketType, TicketPriority } from "@/types/database";
 import StatusBadge from "@/components/StatusBadge";
 
@@ -12,10 +12,30 @@ const TYPE_OPTIONS: { value: TicketType; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
+/**
+ * Deep links used by the mobile Support hub.
+ *
+ * "Warranty concern" and "Feedback" are not separate destinations — they are the
+ * same support form with the type and an opening line already chosen. Two extra
+ * routes would have been two extra pages to keep in sync with one API; a preset
+ * gives the customer the same head start without inventing a parallel workflow.
+ */
+export type SupportPreset = "warranty" | "feedback";
+
+const PRESETS: Record<SupportPreset, { type: TicketType; subject: string }> = {
+  warranty: { type: "technical_issue", subject: "Warranty concern — " },
+  feedback: { type: "other", subject: "Feedback — " },
+};
+
+/** Shared field styling: 16px text on a phone so iOS Safari does not zoom the
+ *  viewport on focus, back to 14px once there is a pointer. */
+const FIELD =
+  "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-base sm:text-sm";
+
 const PRIORITY_OPTIONS: TicketPriority[] = ["low", "medium", "high", "critical"];
 
 const PRIORITY_COLOR: Record<TicketPriority, string> = {
-  low: "bg-ink/5 text-ink/50",
+  low: "bg-soft text-muted",
   medium: "bg-brand-soft text-brand-ink",
   high: "bg-brand-soft text-brand-ink",
   critical: "bg-alert-soft text-alert-ink",
@@ -23,14 +43,19 @@ const PRIORITY_COLOR: Record<TicketPriority, string> = {
 
 export default function SupportTicketsClient({
   initialTickets,
+  preset,
 }: {
   initialTickets: SupportTicketRow[];
+  /** Opens the form with a topic already chosen — see the mobile Support hub. */
+  preset?: SupportPreset;
 }) {
   const [tickets, setTickets] = useState(initialTickets);
-  const [showForm, setShowForm] = useState(false);
-  const [subject, setSubject] = useState("");
+  const [showForm, setShowForm] = useState(Boolean(preset));
+  const [subject, setSubject] = useState(preset ? PRESETS[preset].subject : "");
   const [message, setMessage] = useState("");
-  const [type, setType] = useState<TicketType>("technical_issue");
+  const [type, setType] = useState<TicketType>(
+    preset ? PRESETS[preset].type : "technical_issue"
+  );
   const [priority, setPriority] = useState<TicketPriority>("medium");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,33 +95,43 @@ export default function SupportTicketsClient({
     <div className="mt-6">
       {!showForm ? (
         <button
+          type="button"
           onClick={() => setShowForm(true)}
-          className="rounded-full bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
+          className="mb-4 inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white transition duration-200 hover:bg-brand-600"
         >
-          + New ticket
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          New ticket
         </button>
       ) : (
         <form
           onSubmit={handleSubmit}
-          className="mb-6 max-w-lg space-y-3 rounded-card border border-ink/8 bg-surface p-4 shadow-card"
+          className="mb-6 max-w-lg space-y-4 rounded-card border border-line bg-surface p-4 shadow-[0_1px_2px_rgba(16,38,74,0.04)] sm:p-5"
         >
           <div>
-            <label className="mb-1 block text-sm font-medium text-ink/80">Subject</label>
+            <label htmlFor="ticket-subject" className="mb-1 block text-sm font-medium text-ink/80">
+              Subject
+            </label>
             <input
+              id="ticket-subject"
               required
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Summary of the issue"
-              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
+              className={FIELD}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          {/* One column on a phone: two ~150px selects side by side is a pixel
+              hunt, and the native picker opens either way. */}
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-ink/80">Ticket type</label>
+              <label htmlFor="ticket-type" className="mb-1 block text-sm font-medium text-ink/80">
+                Ticket type
+              </label>
               <select
+                id="ticket-type"
                 value={type}
                 onChange={(e) => setType(e.target.value as TicketType)}
-                className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
+                className={FIELD}
               >
                 {TYPE_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -106,11 +141,17 @@ export default function SupportTicketsClient({
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-ink/80">Priority</label>
+              <label
+                htmlFor="ticket-priority"
+                className="mb-1 block text-sm font-medium text-ink/80"
+              >
+                Priority
+              </label>
               <select
+                id="ticket-priority"
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as TicketPriority)}
-                className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
+                className={FIELD}
               >
                 {PRIORITY_OPTIONS.map((p) => (
                   <option key={p} value={p} className="capitalize">
@@ -121,31 +162,32 @@ export default function SupportTicketsClient({
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-ink/80">
+            <label htmlFor="ticket-message" className="mb-1 block text-sm font-medium text-ink/80">
               Detailed description
             </label>
             <textarea
+              id="ticket-message"
               required
-              rows={3}
+              rows={4}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Describe your issue in detail..."
-              className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"
+              className={FIELD}
             />
           </div>
           {error && <p className="text-sm text-alert-ink">{error}</p>}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-full bg-brand-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+              className="inline-flex h-11 cursor-pointer items-center rounded-xl bg-brand-500 px-5 text-sm font-semibold text-white transition duration-200 hover:bg-brand-600 disabled:opacity-50"
             >
               {submitting ? "Sending..." : "Submit ticket"}
             </button>
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="rounded-full border border-ink/15 px-4 py-1.5 text-sm font-medium text-ink/70"
+              className="inline-flex h-11 cursor-pointer items-center rounded-xl border border-line px-5 text-sm font-medium text-ink/70 transition duration-200 hover:bg-soft"
             >
               Cancel
             </button>
@@ -154,57 +196,107 @@ export default function SupportTicketsClient({
       )}
 
       {tickets.length > 0 && (
-        <div className="mb-3 flex items-center gap-2 rounded-lg border border-ink/15 bg-surface px-3 py-2">
-          <Search className="h-4 w-4 text-ink/35" />
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2.5">
+          <Search className="h-4 w-4 shrink-0 text-muted/80" aria-hidden="true" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search tickets by subject..."
-            className="w-full text-sm outline-none"
+            aria-label="Search tickets"
+            className="w-full bg-transparent text-base outline-none sm:text-sm"
           />
         </div>
       )}
 
       {!filtered.length ? (
-        <p className="text-sm text-ink/50">No tickets yet.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-card border border-ink/8 bg-surface shadow-card">
-          <table className="min-w-[720px] w-full text-left text-sm">
-            <thead className="border-b border-ink/8 bg-canvas text-xs uppercase tracking-wide text-ink/40">
-              <tr>
-                <th className="px-4 py-3 font-medium">Ticket</th>
-                <th className="px-4 py-3 font-medium">Type &amp; Priority</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((t) => (
-                <tr key={t.id} className="border-b border-ink/5 last:border-0">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-ink">{t.subject}</p>
-                    <p className="mt-0.5 max-w-md text-xs text-ink/50">{t.message}</p>
-                    <p className="mt-0.5 text-[11px] text-ink/35">
-                      {new Date(t.created_at).toLocaleDateString()}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="text-xs capitalize text-ink/60">
-                      {t.type.replace("_", " ")}
-                    </p>
-                    <span
-                      className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${PRIORITY_COLOR[t.priority]}`}
-                    >
-                      {t.priority}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={t.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="rounded-card border border-dashed border-line px-5 py-10 text-center">
+          <p className="text-sm font-medium text-ink">No tickets yet</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            {search
+              ? "Nothing matches that search."
+              : "Open a ticket and our team will reply here."}
+          </p>
         </div>
+      ) : (
+        <>
+          {/* Phone: one card per ticket. The old `min-w-[720px]` table forced a
+              sideways scroll on every phone, which pushed the status column —
+              the only thing a customer actually checks — off screen. */}
+          <ul className="space-y-3 md:hidden">
+            {filtered.map((t) => (
+              <li
+                key={t.id}
+                className="rounded-card border border-line bg-surface p-4 shadow-[0_1px_2px_rgba(16,38,74,0.04)]"
+              >
+                <p className="text-sm font-semibold text-ink">{t.subject}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">
+                  {t.message}
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <StatusBadge status={t.status} size="sm" withDot />
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize ${
+                      PRIORITY_COLOR[t.priority]
+                    }`}
+                  >
+                    {t.priority} priority
+                  </span>
+                  <span className="text-[11px] capitalize text-muted">
+                    {t.type.replace(/_/g, " ")}
+                  </span>
+                </div>
+                <p className="mt-2 text-[11px] text-muted">
+                  Opened{" "}
+                  {new Date(t.created_at).toLocaleDateString("en-US", {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden overflow-x-auto rounded-card border border-line bg-surface shadow-[0_1px_2px_rgba(16,38,74,0.04)] md:block">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-line bg-canvas text-xs uppercase tracking-wide text-muted">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Ticket</th>
+                  <th className="px-4 py-3 font-medium">Type &amp; Priority</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((t) => (
+                  <tr key={t.id} className="border-b border-line last:border-0">
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-ink">{t.subject}</p>
+                      <p className="mt-0.5 max-w-md text-xs text-muted">{t.message}</p>
+                      <p className="mt-0.5 text-[11px] text-muted/80">
+                        {new Date(t.created_at).toLocaleDateString()}
+                       </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-xs capitalize text-ink/60">
+                        {t.type.replace(/_/g, " ")}
+                      </p>
+                      <span
+                        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${
+                          PRIORITY_COLOR[t.priority]
+                        }`}
+                      >
+                        {t.priority}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={t.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

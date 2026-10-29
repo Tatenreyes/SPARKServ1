@@ -42,9 +42,10 @@ composing one-off panels:
 
 | Component | Role |
 |-----------|------|
-| `DashboardShell` | Sticky topbar + sidebar + `max-w-[1400px]` content column. Route layouts only pass a `role`. |
-| `DashboardTopbar` | Brand, role pill, notification bell, user menu. |
-| `Sidebar` | Navy rail; icons, badges, collapsible groups, mobile drawer. |
+| `DashboardShell` | Sticky topbar + collapsible sidebar + `max-w-[1800px]` content column. Route layouts only pass a `role`. Owns the desktop rail's collapsed state (persisted) and the mobile drawer. |
+| `DashboardTopbar` | Brand, role pill, notification bell, user menu, desktop sidebar-collapse toggle. |
+| `PlatformAnnouncementTicker` | The platform-wide announcement, scrolled right-to-left in a 32px strip inside the topbar. Fed by `usePlatformAnnouncement` (`GET /api/settings`), dismissible for the session, and absent entirely when `platform_announcement` is blank. |
+| `Sidebar` | Navy rail; icons, badges, collapsible groups, icon-only collapsed state with tooltips, mobile drawer. |
 | `DashboardHero` | Greeting band: eyebrow, title, subtitle, stat row, actions. Optional right-side photograph. |
 | `DashboardStatCard` / `DashboardPanel` | The only card primitives. `DashboardPanel` owns the header (icon, eyebrow, title, description, action) and takes `bodyClassName` for the body. |
 | `ServiceTracking` | Per-request progress strip, derived from real rows (see below). |
@@ -74,6 +75,9 @@ composing one-off panels:
 
 - The 7-step horizontal tracking rail only renders from `md` up; a vertical rail
   replaces it on phones where seven labels can't fit legibly.
+- The topbar is 64px, or 96px while a platform announcement is showing. Anything
+  with a sticky offset below it — the sidebar rail, the request wizard's summary
+  rail — is written against both heights rather than against 64px alone.
 - `DashboardPanel` headers wrap, so a panel action never squeezes the title.
 - Tables scroll inside their panel (`overflow-x-auto`) and never widen the page;
   the content column carries `min-w-0` for this reason.

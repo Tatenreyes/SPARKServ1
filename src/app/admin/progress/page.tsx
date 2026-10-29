@@ -1,57 +1,95 @@
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import StatusBadge from "@/components/StatusBadge";
+import { ACTIVE_BOOKING_STATUSES } from "@/lib/booking-status";
+import { requireRows } from "@/lib/query-rows";
 
 export default async function AdminProgressManagementPage() {
   const supabase = createServiceRoleClient();
 
-  const { data: bookings } = await supabase
+  // Every read below goes through `requireRows()`, which raises on a query error
+  // instead of returning `[]`: a failed SELECT must never render as "No active
+  // jobs right now." — see src/lib/query-rows.ts for why.
+  //
+  // "Active" is the shared definition (src/lib/booking-status.ts), not a local
+  // list. It used to be `pending` + `in_progress` here while /admin/job-monitoring
+  // counted four statuses, so the same "Active Jobs" label showed two different
+  // numbers on two pages.
+  const bookingsResult = await supabase
     .from("bookings")
     .select("*")
-    .in("status", ["pending", "in_progress"])
+    .in("status", ACTIVE_BOOKING_STATUSES)
     .order("scheduled_at", { ascending: true });
+  const bookings = requireRows("active bookings", bookingsResult.data, bookingsResult.error);
 
-  const bookingIds = (bookings ?? []).map((b) => b.id);
-  const { data: visits } = bookingIds.length
+  const bookingIds = bookings.map((b) => b.id);
+  const visitsResult = bookingIds.length
     ? await supabase.from("visits").select("*").in("booking_id", bookingIds)
-    : { data: [] };
+    : null;
+  const visits = visitsResult
+    ? requireRows("visits", visitsResult.data, visitsResult.error)
+    : [];
 
-  const requestIds = Array.from(new Set((bookings ?? []).map((b) => b.service_request_id)));
-  const { data: requests } = requestIds.length
+  const requestIds = Array.from(new Set(bookings.map((b) => b.service_request_id)));
+  const requestsResult = requestIds.length
     ? await supabase.from("service_requests").select("*").in("id", requestIds)
-    : { data: [] };
-  const requestMap = new Map((requests ?? []).map((r) => [r.id, r]));
+    : null;
+  const requests = requestsResult
+    ? requireRows("service requests", requestsResult.data, requestsResult.error)
+    : [];
+  const requestMap = new Map(requests.map((r) => [r.id, r]));
 
   const userIds = Array.from(
-    new Set((bookings ?? []).flatMap((b) => [b.customer_id, b.technician_id]))
+    new Set(bookings.flatMap((b) => [b.customer_id, b.technician_id]))
   );
-  const { data: users } = userIds.length
+  const usersResult = userIds.length
     ? await supabase.from("users").select("id, name").in("id", userIds)
-    : { data: [] };
-  const userMap = new Map((users ?? []).map((u) => [u.id, u.name]));
+    : null;
+  const users = usersResult
+    ? requireRows("customer names", usersResult.data, usersResult.error)
+    : [];
+  const userMap = new Map(users.map((u) => [u.id, u.name]));
 
-  const { count: activeJobs } = await supabase
+  const activeJobsResult = await supabase
     .from("bookings")
     .select("*", { count: "exact", head: true })
-    .in("status", ["pending", "in_progress"]);
+    .in("status", ACTIVE_BOOKING_STATUSES);
+  requireRows("active jobs", null, activeJobsResult.error);
+  const activeJobs = activeJobsResult.count;
 
+  // "Visits Today" is a DAY, so the bound needs both ends. With only
+  // `.gte(...)` the tile counted every visit scheduled today OR LATER — a
+  // next-month appointment inflated today's number.
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const { count: visitsToday } = await supabase
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const visitsTodayResult = await supabase
     .from("visits")
     .select("*", { count: "exact", head: true })
-    .gte("scheduled_at", today.toISOString());
+    .gte("scheduled_at", today.toISOString())
+    .lt("scheduled_at", tomorrow.toISOString());
+  requireRows("visits today", null, visitsTodayResult.error);
+  const visitsToday = visitsTodayResult.count;
 
-  const { data: completedBookings } = await supabase
+  const completedBookingsResult = await supabase
     .from("bookings")
     .select("id, status")
     .eq("status", "completed");
-  const completedBookingIds = (completedBookings ?? []).map((b) => b.id);
-  const { data: completedVisits } = completedBookingIds.length
+  const completedBookings = requireRows(
+    "completed bookings",
+    completedBookingsResult.data,
+    completedBookingsResult.error
+  );
+  const completedBookingIds = completedBookings.map((b) => b.id);
+  const completedVisitsResult = completedBookingIds.length
     ? await supabase
         .from("visits")
         .select("booking_id, status")
         .in("booking_id", completedBookingIds)
-    : { data: [] };
+    : null;
+  const completedVisits = completedVisitsResult
+    ? requireRows("completed visits", completedVisitsResult.data, completedVisitsResult.error)
+    : [];
 
   return (
     <div>
@@ -64,14 +102,14 @@ export default async function AdminProgressManagementPage() {
         <StatCard
           label="Avg. Visits / Job"
           value={
-            bookings?.length
-              ? ((visits?.length ?? 0) / bookings.length).toFixed(1)
+            bookings.length
+              ? (visits.length / bookings.length).toFixed(1)
               : "—"
           }
         />
         <StatCard
           label="First-Time Fix Rate"
-          value={firstTimeFixRate(completedBookings ?? [], completedVisits ?? [])}
+          value={firstTimeFixRate(completedBookings, completedVisits)}
         />
       </div>
 
@@ -88,7 +126,7 @@ export default async function AdminProgressManagementPage() {
             </tr>
           </thead>
           <tbody>
-            {!bookings?.length ? (
+            {!bookings.length ? (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-sm text-ink/40">
                   No active jobs right now.
@@ -97,7 +135,7 @@ export default async function AdminProgressManagementPage() {
             ) : (
               bookings.map((b) => {
                 const r = requestMap.get(b.service_request_id);
-                const jobVisits = (visits ?? []).filter((v) => v.booking_id === b.id);
+                const jobVisits = visits.filter((v) => v.booking_id === b.id);
                 const completed = jobVisits.filter((v) => v.status === "completed").length;
                 return (
                   <tr key={b.id} className="border-b border-ink/5 last:border-0">

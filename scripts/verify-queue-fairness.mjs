@@ -217,7 +217,9 @@ async function createBooking(technicianId, serviceRequestId, start, hours = 2) {
       technician_id: technicianId,
       scheduled_at: start,
       duration_minutes: hours * 60,
-      status: "confirmed",
+      // booking_status has pending / in_progress / completed / cancelled;
+      // payment confirmation is a separate payment_status value.
+      status: "pending",
     })
     .select("id")
     .single();

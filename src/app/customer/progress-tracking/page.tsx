@@ -10,7 +10,11 @@ export default async function ProgressTrackingPage() {
     .from("bookings")
     .select("*")
     .eq("customer_id", user!.id)
-    .in("status", ["pending", "in_progress"])
+    // A repair is still the customer's to track until the verified payment closes
+    // it: `awaiting_inspection` needs their sign-off and `awaiting_payment` needs
+    // their GCash reference, so both belong on this page rather than disappearing
+    // from it the moment the technician finishes.
+    .in("status", ["pending", "in_progress", "awaiting_inspection", "awaiting_payment"])
     .order("scheduled_at", { ascending: true });
 
   const bookingIds = (bookings ?? []).map((b) => b.id);

@@ -5,7 +5,7 @@ const SECTIONS = [
   },
   {
     title: "Troubleshooting Policy",
-    body: "Before a request is submitted, SPARKServ offers basic rule-based troubleshooting tips. These are general guidance only, not a diagnosis — always prioritize your safety and stop if you're unsure.",
+    body: "SPARKServ offers optional preliminary checks for the issue you identify. They are rule-based general guidance from a reviewed list, not a diagnosis and not a repair instruction — always prioritise your safety, stop if you are unsure, and skip them at any time. Reporting that a check worked is your own report; it does not mean the appliance has been professionally repaired, and you can still request a technician.",
   },
   {
     title: "Technician Assignment Policy",
@@ -13,7 +13,7 @@ const SECTIONS = [
   },
   {
     title: "Estimate Policy",
-    body: "Once a technician accepts your request, they will send a cost estimate before any work begins. You may accept or decline an estimate; work only proceeds after you accept.",
+    body: "Once a technician accepts your request, they will send a preliminary cost estimate — the proposed work plus itemized labour, parts and any additional charges — before any work begins. You can approve it, decline it, or ask for a revision; the estimate is only a quotation based on what the technician knows so far, so an inspection may reveal more work. Approving an estimate does not book anything by itself: you choose the appointment time in the next step, and the slot is checked against your technician's schedule and capacity. If extra chargeable work is found later, your technician must send a revised estimate and you must approve that new version before the extra work proceeds — your earlier approval never covers a changed scope or price. Declining an estimate creates no booking.",
   },
   {
     title: "Cancellation Policy",
@@ -21,7 +21,7 @@ const SECTIONS = [
   },
   {
     title: "Booking Policy",
-    body: "Bookings are scheduled at a date/time you select after accepting an estimate. Please be available at the scheduled location and time, or message your technician in advance if plans change.",
+    body: "Bookings are scheduled at a date/time you select after approving an estimate. Please be available at the scheduled location and time, or message your technician in advance if plans change.",
   },
   {
     title: "Appliance Inspection Policy",

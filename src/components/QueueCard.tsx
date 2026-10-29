@@ -102,7 +102,95 @@ export default function QueueCard({
           )}
         </div>
 
-        <div className="mt-3 overflow-x-auto">
+        {/* Phone: one card per technician, in rotation order. The desktop table
+            needs 560px to stay readable; forcing it onto a 360px screen pushed
+            the status column — the only column that changes — off the edge. The
+            order is identical in both, because it is the queue. */}
+        <ul className="mt-3 space-y-2 md:hidden">
+          {queue.entries.map((entry) => {
+            const meta = operationalStatusMeta(entry.operationalStatus);
+            const isMine = entry.isSelf;
+            return (
+              <li
+                key={entry.technicianId}
+                className={`rounded-xl border p-3.5 ${
+                  isMine
+                    ? "border-brand-300 bg-brand-soft/60"
+                    : entry.isMemberActive
+                      ? "border-line bg-surface"
+                      : "border-line bg-soft/60"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg px-2 text-xs font-bold ${
+                      isMine
+                        ? "bg-brand-600 text-white"
+                        : entry.isMemberActive
+                          ? "bg-soft text-muted"
+                          : "bg-soft text-muted/80"
+                    }`}
+                  >
+                    {entry.position ? `#${entry.position}` : "—"}
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`truncate text-sm font-semibold ${
+                          isMine ? "text-brand-ink" : "text-ink"
+                        }`}
+                      >
+                        {isMine ? "You" : entry.name}
+                      </span>
+                      {isMine && (
+                        <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
+                          You
+                        </span>
+                      )}
+                      {entry.isNextInQueue && (
+                        <span className="rounded-full border border-line bg-signal-soft px-2 py-0.5 text-[10px] font-semibold text-signal-ink">
+                          Next turn
+                        </span>
+                      )}
+                    </span>
+                    {isMine && (
+                      <span className="mt-0.5 block truncate text-[11px] text-muted">
+                        {entry.name}
+                      </span>
+                    )}
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span
+                        title={meta.hint}
+                        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                          TONE_CHIP[meta.tone] ?? TONE_CHIP.neutral
+                        }`}
+                      >
+                        {entry.isMemberActive ? meta.label : `${meta.label} · out of rotation`}
+                      </span>
+                      {entry.activeOfferRequestId && (
+                        <span className="rounded-full border border-line bg-warn-soft px-2 py-0.5 text-[10px] font-semibold text-warn-ink">
+                          {isMine ? "Offer waiting on you" : "Reviewing an offer"}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="mt-2 text-[11px] text-muted">
+                      {entry.nextBookingAt
+                        ? `Next booking ${formatQueueTime(entry.nextBookingAt)}`
+                        : entry.currentJobUntil
+                          ? `On job until ${formatQueueTime(entry.currentJobUntil)}`
+                          : "No booking recorded"}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="mt-3 hidden overflow-x-auto md:block">
           <table className="w-full min-w-[560px] text-left text-sm">
             <thead>
               <tr className="border-b border-line">

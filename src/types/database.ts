@@ -11,8 +11,21 @@ export type RequestStatus =
   | "in_progress"
   | "completed"
   | "cancelled";
-export type BookingStatus = "pending" | "in_progress" | "awaiting_inspection" | "completed" | "cancelled";
-export type EstimateStatus = "pending" | "accepted" | "rejected";
+export type BookingStatus =
+  | "pending"
+  | "in_progress"
+  | "awaiting_inspection"
+  | "awaiting_payment"
+  | "completed"
+  | "cancelled";
+
+export type EstimateStatus =
+  | "draft"
+  | "pending"
+  | "revision_requested"
+  | "accepted"
+  | "rejected"
+  | "superseded";
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 export type TicketType = "product_inquiry" | "billing_inquiry" | "technical_issue" | "other";
 export type TicketPriority = "low" | "medium" | "high" | "critical";
@@ -20,6 +33,13 @@ export type VisitStatus = "upcoming" | "in_progress" | "completed";
 export type PaymentStatus = "pending_verification" | "confirmed" | "rejected";
 export type AssignmentStatus = "matching" | "offered" | "accepted" | "waiting";
 export type OfferStatus = "offered" | "accepted" | "rejected";
+
+/**
+ * What the customer reported after trying the preliminary troubleshooting
+ * checks. Their report only — never a verified repair or a diagnosis. `null`
+ * means they never reached the checks.
+ */
+export type TroubleshootingOutcome = "resolved" | "unresolved" | "skipped";
 
 /**
  * A technician's OPERATIONAL state — deliberately separate from queue
@@ -219,6 +239,25 @@ export interface ServiceRequestRow {
   service_type: string;
   status: RequestStatus;
   chatbot_resolved: boolean;
+  /**
+   * The service location the customer confirmed on the map (src/lib/geo.ts).
+   * `latitude`/`longitude` are a pair — the database rejects one without the
+   * other, and both are range-checked — so a marker can only be drawn when a
+   * complete, valid coordinate is present. Readable by the owning customer, an
+   * ASSIGNED technician and administrators; never by an unaccepted offer.
+   */
+  location: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  /**
+   * The issue the customer identified: chosen from the appliance's list, or a
+   * detected suggestion they explicitly confirmed. `null` when the problem could
+   * not be identified — the request is still valid and the technician diagnoses it.
+   * `issue_category` keeps the human label, `issue_id` the stable catalogue id.
+   */
+  issue_id: string | null;
+  /** What the customer reported after the checks (see TroubleshootingOutcome). */
+  troubleshooting_outcome: TroubleshootingOutcome | null;
   assigned_technician_id: string | null;
   assignment_status: AssignmentStatus;
   offers_expires_at: string | null;
@@ -229,6 +268,29 @@ export interface ServiceRequestRow {
   requested_duration_minutes: number | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * What technician_pending_offers() returns: an offer addressed to the calling
+ * technician, with only the fields needed to decide whether to accept it.
+ * Deliberately contains NO address, coordinates or customer identity — an
+ * unaccepted offer must never expose the customer's precise service location
+ * (see supabase/migration_service_location.sql).
+ */
+export interface TechnicianPendingOfferRow {
+  id: string;
+  appliance_type: string;
+  issue_category: string | null;
+  problem_description: string;
+  photos: string[];
+  service_type: string;
+  status: RequestStatus;
+  requested_window_start: string | null;
+  requested_window_end: string | null;
+  requested_duration_minutes: number | null;
+  assignment_status: AssignmentStatus;
+  offers_expires_at: string | null;
+  created_at: string;
 }
 
 export interface TechnicianOfferRow {
@@ -244,9 +306,42 @@ export interface EstimateRow {
   id: string;
   service_request_id: string;
   technician_id: string;
+  /**
+   * The authoritative TOTAL, always equal to `labor_cost + parts_cost +
+   * other_cost` — computed by `submit_estimate()` and enforced by
+   * `estimates_amounts_check`, never taken from the browser.
+   */
   estimated_cost: number;
   notes: string | null;
   status: EstimateStatus;
+  /** What the technician proposes to do. Required for a submitted estimate. */
+  scope: string | null;
+  labor_cost: number;
+  /** May legitimately be 0 — plenty of repairs need no parts. */
+  parts_cost: number;
+  other_cost: number;
+  /** Required whenever `other_cost` > 0, so an extra charge is never vague. */
+  other_description: string | null;
+  /** 1 for the first quote; a revision is a new row with a higher version. */
+  version: number;
+  /** The version this one replaced (null for v1). */
+  supersedes_id: string | null;
+  /** Set on the replaced version once a newer one is submitted. */
+  superseded_by: string | null;
+  /** The customer's explanation when they asked for a change. */
+  revision_reason: string | null;
+  revision_requested_at: string | null;
+  /** Optional note recorded with an approval or a decline. */
+  decision_note: string | null;
+  /** When the technician submitted it (null while it is still a draft). */
+  submitted_at: string | null;
+  decided_at: string | null;
+  decided_by: string | null;
+  /**
+   * Set once on approval and never cleared, so an approval that was later
+   * superseded by a revision stays on the record.
+   */
+  approved_at: string | null;
   created_at: string;
 }
 
@@ -354,6 +449,15 @@ export interface PaymentRow {
   payment_date: string;
   confirmed_by: string | null;
   confirmed_at: string | null;
+  /**
+   * The rejection decision (Batch 3). `confirmed_by`/`confirmed_at` stay null on a
+   * rejected row: a rejection is not a verification, and the two decisions are
+   * recorded on separate columns so the audit trail cannot conflate them.
+   */
+  rejected_by: string | null;
+  rejected_at: string | null;
+  /** Customer-visible text. Non-empty and at most 500 characters when rejected. */
+  rejection_reason: string | null;
   created_at: string;
 }
 
@@ -529,6 +633,49 @@ export interface Database {
         Returns: boolean;
       };
       /**
+       * Server-only: the transactional estimate workflow. Computes the total from
+       * the itemized lines, supersedes the version the customer already saw (a
+       * revised quote is a NEW row) and returns the resulting version.
+       */
+      submit_estimate: {
+        Args: {
+          p_request_id: string;
+          p_technician_id: string;
+          p_scope: string;
+          p_labor: number;
+          p_parts: number;
+          p_other: number;
+          p_other_description: string | null;
+          p_notes: string | null;
+          p_submit: boolean;
+        };
+        Returns: Json;
+      };
+      /**
+       * Server-only: approve, decline or request a revision on the EXACT version
+       * awaiting a decision. A second call for the same version is a no-op
+       * (`outcome: 'not_pending'`), which is what makes retries safe.
+       */
+      decide_estimate: {
+        Args: {
+          p_estimate_id: string;
+          p_actor_id: string;
+          p_decision: string;
+          p_reason?: string | null;
+        };
+        Returns: Json;
+      };
+      /**
+       * The calling technician's own PENDING offers, with no address,
+       * coordinates or customer identity. Refuses every non-technician inside
+       * the function, so it can never be used to read another customer's
+       * service location.
+       */
+      technician_pending_offers: {
+        Args: Record<string, never>;
+        Returns: TechnicianPendingOfferRow[];
+      };
+      /**
        * The full queue for an appliance type (null = every queue the caller
        * belongs to). Callable by a signed-in technician or admin only —
        * customers are refused inside the function.
@@ -536,6 +683,73 @@ export interface Database {
       technician_queue_snapshot: {
         Args: { p_appliance_type?: string | null };
         Returns: TechnicianQueueSnapshotRow[];
+      };
+      /**
+       * Server-only: does ANY technician currently qualify for this appliance type?
+       *
+       * The same predicate the queue walk and `create_booking_atomic()` use — an active
+       * account, an approved technician, not suspended, and an ACTIVE queue membership
+       * for the appliance — so it cannot disagree with who is actually offered the work.
+       * It exists so the API can tell "nobody covers this appliance" apart from
+       * "everybody is busy", which are different promises to make to a customer.
+       */
+      appliance_has_qualified_technician: {
+        Args: { p_appliance_type: string };
+        Returns: boolean;
+      };
+      /**
+       * Server-only: the ONE writer of a booking. Locks the request, takes the
+       * technician's scheduling lock, re-checks the estimate, the working hours,
+       * time off, existing appointments and capacity, then writes the booking, the
+       * request status and the job-load counter in one transaction — or none of it.
+       *
+       * `already_booked` (with the existing booking id) makes a retry idempotent;
+       * every scheduling refusal comes back as an outcome rather than an error, so
+       * the route can answer with a readable conflict instead of a 500.
+       */
+      create_booking_atomic: {
+        Args: {
+          p_request_id: string;
+          p_estimate_id: string;
+          p_actor: string;
+          p_scheduled_at: string;
+          p_duration_minutes?: number | null;
+          p_notes?: string | null;
+        };
+        Returns: Json;
+      };
+      /**
+       * Server-only: gives a cancelled booking's slot back. One statement, so two
+       * cancellations for the same technician cannot lose a decrement, and floored
+       * at zero.
+       */
+      release_technician_slot: {
+        Args: { p_technician_id: string };
+        Returns: number;
+      };
+      /**
+       * Server-only: the ONLY writer of a payment rejection. Locks the payment
+       * row, re-reads the actor's role from the database (administrator or
+       * super administrator only), requires a trimmed non-empty reason of at most
+       * 500 characters, and records the decision on its own columns —
+       * `confirmed_by`/`confirmed_at` stay null, because a rejection is not a
+       * verification.
+       *
+       * Nothing else moves: the booking, the service request, the technician's
+       * slot counter and `service_history` are untouched, so the repair stays at
+       * the payment step and the customer can submit a new reference.
+       *
+       * `outcome` is `rejected` (success), or `forbidden` / `invalid_input` /
+       * `not_found` / `not_pending` — every expected condition comes back as an
+       * outcome, so the route answers 403/400/404/409 rather than a 500.
+       */
+      reject_payment: {
+        Args: {
+          p_payment_id: string;
+          p_actor: string;
+          p_reason: string;
+        };
+        Returns: Json;
       };
     };
   };
@@ -555,9 +769,38 @@ export type AssignmentOutcome = {
   skipped?: string[];
 };
 
+/** Shape returned by submit_estimate(). */
+export type EstimateSubmissionOutcome = {
+  outcome: "draft_saved" | "submitted" | "revised" | "not_assigned" | "request_closed";
+  request_id?: string;
+  estimate_id?: string;
+  version?: number;
+  status?: EstimateStatus;
+  total?: number;
+  superseded_id?: string | null;
+  assignment_status?: string;
+  request_status?: string;
+};
+
+/** Shape returned by decide_estimate(). */
+export type EstimateDecisionOutcome = {
+  outcome: "approve" | "decline" | "request_revision" | "not_pending";
+  estimate_id: string;
+  version?: number;
+  status?: EstimateStatus;
+  reason?: string | null;
+};
+
+/** The three decisions a customer can make about one estimate version. */
+export type EstimateDecision = "approve" | "decline" | "request_revision";
+
 /** Shape returned by respond_to_offer(). */
 export type OfferResponseOutcome = {
-  outcome: "accepted" | "declined" | "expired" | "not_offered";
+  /**
+   * `cancelled` means the request was withdrawn (or finished) before the
+   * technician answered: the offer was released and NOT accepted.
+   */
+  outcome: "accepted" | "declined" | "expired" | "not_offered" | "cancelled";
   request_id: string;
   assigned_technician_id?: string | null;
   assignment_status?: AssignmentStatus;

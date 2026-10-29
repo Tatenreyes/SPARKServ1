@@ -5,6 +5,7 @@ import type {
   ExpiredOffersOutcome,
   OfferResponseOutcome,
   ServiceRequestRow,
+  TechnicianPendingOfferRow,
   TechnicianQueueSnapshotRow,
 } from "@/types/database";
 import { notify } from "@/lib/notifications";
@@ -174,6 +175,62 @@ export async function getTechnicianQueue(
  * after a technician is newly approved or their specializations change, since a
  * previously-unmatchable request might now have a fit.
  */
+/**
+ * The calling technician's own PENDING offers, read through the narrow
+ * `technician_pending_offers()` RPC.
+ *
+ * Why not just select the rows? Because an unaccepted offer must not expose the
+ * customer's service location. The RPC (supabase/migration_service_location.sql)
+ * returns only the fields needed to decide, and it refuses every caller that is
+ * not a technician, so this is the sanctioned path for the offer screens.
+ *
+ * Must be called with a client that carries the technician's JWT.
+ *
+ * `technicianId` is used ONLY by the drift fallback below.
+ */
+export async function getTechnicianPendingOffers(
+  supabase: SupabaseClient<Database>,
+  technicianId?: string | null
+): Promise<TechnicianPendingOfferRow[]> {
+  const { data, error } = await supabase.rpc("technician_pending_offers");
+  if (!error) return (data ?? []) as unknown as TechnicianPendingOfferRow[];
+
+  // Deployment-ahead-of-database (the same drift the request API already
+  // handles): the function does not exist until the migration is applied, and a
+  // technician must not be shown an empty offer list in the meantime. The
+  // fallback reads the SAME fields directly — its column list deliberately
+  // excludes location/latitude/longitude, so the customer's precise service
+  // location stays out of the payload whether or not the migration has run.
+  if (!technicianId) throw error;
+
+  const { data: rows, error: fallbackError } = await supabase
+    .from("service_requests")
+    .select(PENDING_OFFER_COLUMNS)
+    .eq("assigned_technician_id", technicianId)
+    .eq("assignment_status", "offered")
+    .order("created_at", { ascending: false });
+
+  if (fallbackError) throw fallbackError;
+  return (rows ?? []) as unknown as TechnicianPendingOfferRow[];
+}
+
+/** Columns the offer screens may read — never the address or the coordinates. */
+const PENDING_OFFER_COLUMNS = [
+  "id",
+  "appliance_type",
+  "issue_category",
+  "problem_description",
+  "photos",
+  "service_type",
+  "status",
+  "requested_window_start",
+  "requested_window_end",
+  "requested_duration_minutes",
+  "assignment_status",
+  "offers_expires_at",
+  "created_at",
+].join(", ");
+
 export async function rematchWaitingRequests(supabase: SupabaseClient<Database>) {
   const { data: waiting } = await supabase
     .from("service_requests")

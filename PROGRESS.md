@@ -1,28 +1,33 @@
 # SPARKServ — Progress
 
-Status as of 27 Sep 2026. This is the "where does the project actually stand"
+Status as of 30 Oct 2026. This is the "where does the project actually stand"
 document: what is finished, what is proven, and what is still owed. The queue
 rules themselves are in `QUEUE-SYSTEM.md`; how to re-prove them is in
 `TESTING.md`.
 
 ## Summary
 
-The technician queue redesign is **code-complete and locally verified**. It is
-**not yet applied to the live database**, so the live verification step is still
-open — that is the only thing standing between this branch and the acceptance
-scenario being true in production.
+The technician queue redesign, Batches 1–3, the booking-eligibility invariant
+(step 17) and the atomic cancellation release (step 18) are **code-complete and
+locally verified, and the live database now has every migration applied —
+steps 1–18** (`npm run db:check` exits 0 with 76 checks passed). What is still
+owed is on the code side: the whole implementation sits uncommitted in the
+working tree, and no deployment has been verified. Until the release is committed
+and deployed, the *deployed* app is not the app this document describes.
 
 | Area | State |
 | --- | --- |
-| Queue model in Postgres (tables, RPCs, triggers, grants) | Implemented; proven 69/69 against real Postgres |
+| Queue model in Postgres (tables, RPCs, triggers, grants) | Implemented; proven **374/374** checks in the SQL suite |
 | Fresh-install schema (`supabase/schema.sql`) | Matches the migrated end state; harness builds a DB from it and all checks pass |
 | TypeScript layer (`src/lib/queue.ts`, `assignment.ts`, `service-time.ts`, types) | Implemented; `tsc --noEmit` clean |
 | API endpoints | Implemented; all routes compile in `next build` |
 | Technician / Admin / Customer screens | Implemented; build succeeds, `/technician/queue` present in the route table |
 | Forbidden behaviour removed | Ranking endpoint, scoring engine and ranked card deleted |
 | Documentation | Updated across 8 files (see below) |
-| **Live database migration** | **Pending — must be run by a human in the Supabase SQL editor** |
-| **Live verification** (`npm run verify:queue`) | **Pending — blocked on the migration above** |
+| **Live database migration** | **Applied — steps 1–18; `npm run db:check` exits 0 (76 checks passed)** |
+| **Application code** | **Uncommitted — the whole release is in the working tree (93 modified, 29 deleted, 93 untracked paths)** |
+| **Deployment** | **Not verified — no deployment URL is recorded in this repo; do not describe production as running this code** |
+| **Live verification** (`npm run verify:queue`) | **Pending — deliberately not run: it creates and cleans up live fixtures** |
 | Manual UI walkthrough with real accounts | Pending |
 
 ## What is implemented
@@ -76,11 +81,11 @@ so nothing broke. Reasoning is recorded in `QUEUE-SYSTEM.md`.
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Queue behaviour against real SQL | `npm run test:queue-sql` | **69/69 passed** |
+| Queue behaviour against real SQL | `npm run test:queue-sql` | **374/374 checks passed** |
 | Types | `npx tsc --noEmit` | clean |
-| Lint | `npx next lint` | clean except one pre-existing `<img>` warning in `RequestRepairWizard.tsx` |
-| Whole app compiles, routes resolve | `npm run build` | succeeded, 67/67 pages; `/technician/queue`, `/api/admin/queue-override`, `/api/cron/assignment-tick`, `/api/technician-availability` all present |
-| **Live DB migration state** | `npm run db:check` | exit 1 — **nothing applied** (11 + 2 + 22 objects missing) |
+| Lint | `npm run lint` | clean — no warnings or errors |
+| Whole app compiles, routes resolve | `npm run build` | succeeded; `/technician/queue`, `/api/admin/queue-override`, `/api/cron/assignment-tick`, `/api/technician-availability` all present |
+| **Live DB migration state** | `npm run db:check` | exit 0 — **all 18 applied** (76 checks passed) |
 
 `npm run test:queue-sql` boots a real Postgres in-process (PGlite), loads
 `schema.sql` and the two `SECURITY INVOKER` harness files, and asserts the spec
@@ -97,33 +102,20 @@ simulated timing.
 
 ## What is NOT proven yet
 
-0. **THE LIVE DATABASE HAS NONE OF THE THREE MIGRATIONS.** This was measured,
-   not assumed — `npm run db:check` (added in this pass) probes the real project
-   in `.env.local` and reports, per migration, per object:
+0. **The live database is migrated; the deployed application is not.** `npm run
+   db:check` exits 0 against the real project in `.env.local` and reports all 18
+   migrations applied (76 checks passed; **42 RPCs** exposed to the service role).
+   The risk has therefore flipped direction: the database now enforces steps 14–18, so
+   a deployed build of a committed revision cannot book (step 15 withdrew the INSERT
+   policies on `bookings`), cannot complete a repair (`confirm_payment()` is the only
+   writer), and double-decrements `active_job_load` on every cancellation (the
+   committed route decrements by hand *and* step 18's trigger releases). See
+   `DATABASE.md` → *Known state worth flagging*, and the release manifest.
 
-   | Migration | Objects missing |
-   | --- | --- |
-   | `migration_sync_live_schema.sql` | **11 of 11** — not applied |
-   | `migration_flow_hardening.sql` | 2 of 3 — `offers_expires_at` and `expire_offer()` absent |
-   | `migration_queue_redesign.sql` | **22 of 22** — not applied |
-
-   The base tables the migrations build on all exist and are readable
-   (`technician_queue_state`, `service_requests`, `appliances`, `bookings`,
-   `estimates`, `technicians`, `users`, `system_settings`,
-   `technician_offer_history`, `notifications`), so migration 3's
-   `alter table public.technician_queue_state` will find its target. Only **3
-   RPCs** are exposed to the service role on the live project.
-
-   The consequence is worse than "the new queue is not live": because
-   `service_requests.problem_description`, `photos`, `service_type` and
-   `appliance_id` are all absent, **the deployed app cannot create a repair
-   request at all** — every POST hits PostgreSQL 42703, which PostgREST surfaces
-   as an unexplained HTTP 500. That is migration 1's whole purpose and it has
-   never been run.
-
-1. **Live schema.** The three migrations have not been applied to the live
-   Supabase project. Until they are, the deployed app is still running the old
-   queue and `verify:queue` cannot pass.
+1. **The release itself.** The code that matches the live schema is uncommitted and
+   undeployed. Nothing here can be described as running in production until the
+   release is committed, pushed, deployed, and the deployed revision is confirmed to
+   be the one that was tested.
 2. **RLS and auth behaviour on the live project.** PGlite has no Supabase Auth,
    so no JWT roles exist there. The checks that only the live run can give — a
    technician reading another technician's queue rows, a customer being refused
@@ -134,10 +126,9 @@ simulated timing.
    not been observed firing.
 5. **Availability and area data entry — now built, still unexercised.** The three
    tables are edited on `/technician/profile` via `AvailabilityManager`, which
-   reads and writes `/api/technician-availability` (including the new
-   `add_area` / `remove_area` actions, which nothing wrote before). It has never
-   been opened in a browser, because it needs migration 3 applied first — the
-   API returns `503` naming the migration until then.
+   reads and writes `/api/technician-availability` (including the `add_area` /
+   `remove_area` actions). Migration 3 is applied, so the old `503` reason no
+   longer applies — it has simply never been opened in a browser.
 
 ## Fix applied while writing these docs
 
@@ -162,24 +153,27 @@ Manila, so the conversion does not depend on the machine's clock.
 
 ## Next steps, in order
 
-1. **Apply the migrations** (human action — Supabase SQL Editor, in this order,
-   one file at a time, waiting for each to report success):
-   `migration_sync_live_schema.sql` → `migration_flow_hardening.sql` →
-   `migration_queue_redesign.sql`. Then reload the Postgres schema in the
-   dashboard so PostgREST notices the new RPCs and columns. Every file is
-   guarded and idempotent, so a re-run is harmless.
-2. **`npm run db:check`** — must report all three applied before going further.
-   This is now the gate; it replaces guessing.
-3. Copy the `-- 7. VERIFY` block at the end of `migration_queue_redesign.sql` and
-   run it: `2.0` as the model version and non-zero membership rows.
+1. **Ship the release.** The migrations are already live; the code is not. Stage the
+   release paths explicitly (never `git add -A`), commit, push `main` to
+   `origin/main`, and deploy. `DATABASE.md` → *Known state worth flagging* carries the
+   safety checks and the ordering rules; the release manifest lists the exact paths.
+2. **`npm run db:check`** — must still exit 0 (all 18 applied) before and after the
+   deploy. This is the gate; it replaces guessing. Do **not** re-apply migrations
+   1–18: they are applied, and idempotence is a safety net, not an invitation.
+3. **Confirm the deployed revision** — the deployed commit must be the one that was
+   tested locally. There is no deployment URL recorded in this repo, so this is a
+   check against the hosting dashboard, not against a documented URL.
 4. `npm run verify:queue`. Expect `checks failed: 0`. Anything else is a real bug
-   or an unapplied migration. (This script needs only the anon + service-role
-   keys already in `.env.local`; the earlier note claiming it needs
-   `SUPABASE_PAT` was wrong.)
+   or an unapplied migration. **It is a live write**: it creates and cleans up its own
+   fixtures (users, requests, bookings, queue rows) scoped to a unique appliance type,
+   so run it deliberately. (It needs only the anon + service-role keys already in
+   `.env.local`; the earlier note claiming it needs `SUPABASE_PAT` was wrong.)
 5. Manual walkthrough: technician sees the full rotation and their own position,
    and can save working hours / time off / service areas on
    `/technician/profile`; admin sees skip reasons; customer sees only the four
    plain-language states; an ignored offer visibly re-offers after the TTL.
 6. Confirm the cron fires in the Vercel logs.
-7. Commit — nothing from this redesign is committed yet (see `git status`).
+7. Keep this document honest. It reported the migrations as pending for five weeks
+   after they had been applied; update `PROGRESS.md` in the same commit as the
+   release, not afterwards.
 

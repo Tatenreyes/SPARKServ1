@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { CalendarClock } from "lucide-react";
 import { formatRequestedWindow } from "@/lib/service-time";
 import AssignmentStatusCard from "@/components/AssignmentStatusCard";
+import EstimateReviewCard from "@/components/EstimateReviewCard";
+import ServiceLocationCard from "@/components/ServiceLocationCard";
 import StatusBadge from "@/components/StatusBadge";
+import { isOpenEstimateStatus } from "@/lib/estimate-costs";
 import type { EstimateRow, ServiceRequestRow } from "@/types/database";
 
 interface AssignedTechnician {
@@ -27,36 +28,19 @@ export default function RequestDetailClient({
   assignedTechnician,
   serviceTimeZone,
 }: RequestDetailClientProps) {
-  const router = useRouter();
-  const estimates = initialEstimates;
-  const [scheduledAt, setScheduledAt] = useState("");
-  const [bookingEstimateId, setBookingEstimateId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Only versions the customer may see (RLS already hides drafts), newest first.
+  const versions = initialEstimates
+    .filter((estimate) => estimate.status !== "draft")
+    .sort((a, b) => b.version - a.version);
 
-  async function handleBook(estimate: EstimateRow) {
-    if (!scheduledAt) {
-      setError("Pick a date/time first.");
-      return;
-    }
-    setError(null);
-    try {
-      const res = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          service_request_id: request.id,
-          technician_id: estimate.technician_id,
-          estimate_id: estimate.id,
-          scheduled_at: new Date(scheduledAt).toISOString(),
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
-      router.push(`/customer/bookings/${json.data.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create booking");
-    }
-  }
+  // The version that matters right now: the one awaiting a decision, else the
+  // approved one, else the most recent (e.g. a declined or superseded quote).
+  const currentEstimate =
+    versions.find((estimate) => isOpenEstimateStatus(estimate.status)) ??
+    versions.find((estimate) => estimate.status === "accepted") ??
+    versions[0] ??
+    null;
+  const earlierVersions = versions.filter((estimate) => estimate.id !== currentEstimate?.id);
 
   return (
     <div className="space-y-8">
@@ -78,58 +62,57 @@ export default function RequestDetailClient({
         />
       </div>
 
-      {error && <p className="text-sm text-alert-ink">{error}</p>}
+      {/* What the customer confirmed on the map, exactly as it was saved, so a
+          reopened request shows the location it will be serviced at. */}
+      <ServiceLocationCard
+        address={request.location}
+        latitude={request.latitude}
+        longitude={request.longitude}
+        title={request.service_type === "pickup_return" ? "Pickup location" : "Service location"}
+        emptyMessage="You did not record a service location for this request. Your technician will confirm the address with you."
+      />
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-ink">Technician</h2>
-        <AssignmentStatusCard
-          status={request.assignment_status}
-          applianceType={request.appliance_type}
-          technician={assignedTechnician}
-          offersExpiresAt={request.offers_expires_at}
-        />
+        {request.status === "cancelled" ? (
+          // A cancelled request has no assignment to report: showing the live
+          // "checking availability" card here would contradict the cancelled badge.
+          <p className="rounded-card border border-line bg-soft/60 px-4 py-3 text-sm text-ink/70">
+            You cancelled this request, so no technician is being matched. Submit a
+            new request whenever you need service again.
+          </p>
+        ) : (
+          <AssignmentStatusCard
+            status={request.assignment_status}
+            applianceType={request.appliance_type}
+            technician={assignedTechnician}
+            offersExpiresAt={request.offers_expires_at}
+          />
+        )}
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-ink">Estimates received</h2>
-        {!estimates.length ? (
+        <h2 className="mb-3 text-lg font-semibold text-ink">Estimate</h2>
+        {!currentEstimate ? (
           <p className="text-sm text-ink/50">
             {request.assignment_status === "accepted"
               ? "Your technician hasn't sent an estimate yet."
               : "An estimate will appear here once a technician has accepted this request."}
           </p>
         ) : (
-          <div className="space-y-3">
-            {estimates.map((est) => (
-              <div key={est.id} className="rounded-card border border-ink/8 p-4">
-                <div className="flex items-center justify-between">
-                  <p className="font-medium text-ink">₱{est.estimated_cost.toFixed(2)}</p>
-                  <StatusBadge status={est.status} />
-                </div>
-                {est.notes && <p className="mt-1 text-sm text-ink/65">{est.notes}</p>}
-
-                {est.status === "pending" && request.status !== "booked" && (
-                  <div className="mt-3 flex items-center gap-2">
-                    <input
-                      type="datetime-local"
-                      value={bookingEstimateId === est.id ? scheduledAt : ""}
-                      onChange={(e) => {
-                        setBookingEstimateId(est.id);
-                        setScheduledAt(e.target.value);
-                      }}
-                      className="rounded-lg border border-ink/15 px-2 py-1.5 text-sm"
-                    />
-                    <button
-                      onClick={() => handleBook(est)}
-                      className="rounded-full bg-brand-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-600"
-                    >
-                      Accept & book
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          // Reviewing, approving and scheduling all live in the shared card, so
+          // this page and /customer/estimates can never disagree about what is
+          // being approved or what state it is in.
+          <EstimateReviewCard
+            estimate={currentEstimate}
+            history={earlierVersions}
+            request={{
+              appliance_type: request.appliance_type,
+              problem_description: request.problem_description,
+              assignment_status: request.assignment_status,
+              status: request.status,
+            }}
+          />
         )}
       </section>
     </div>

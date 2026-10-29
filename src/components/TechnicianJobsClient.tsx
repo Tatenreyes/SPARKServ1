@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Navigation, Plus, Image as ImageIcon, MessageSquare } from "lucide-react";
+import { Plus, Image as ImageIcon, MessageSquare } from "lucide-react";
 import type { BookingRow, ServiceRequestRow, VisitRow } from "@/types/database";
 import StatusBadge from "@/components/StatusBadge";
 import BookingStatusControl from "@/components/BookingStatusControl";
+import ServiceLocationCard from "@/components/ServiceLocationCard";
+import { isActiveBookingStatus } from "@/lib/booking-status";
 
 export default function TechnicianJobsClient({
   bookings,
@@ -18,9 +20,11 @@ export default function TechnicianJobsClient({
   visits: VisitRow[];
 }) {
   const requestMap = new Map(requests.map((r) => [r.id, r]));
-  const active = bookings.filter(
-    (b) => b.status === "pending" || b.status === "in_progress" || b.status === "awaiting_inspection"
-  );
+  // One shared definition of "active" (src/lib/booking-status.ts). A repair
+  // awaiting the customer's payment or an administrator's verification is still
+  // this technician's job: it is neither finished nor cancelled, and hiding it
+  // here would make it disappear.
+  const active = bookings.filter((b) => isActiveBookingStatus(b.status));
   const completed = bookings.filter((b) => b.status === "completed" || b.status === "cancelled");
 
   return (
@@ -85,8 +89,6 @@ function JobCard({
   const [scheduledAt, setScheduledAt] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const mapsUrl = null;
-
   async function handleAddVisit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
@@ -126,17 +128,21 @@ function JobCard({
         <StatusBadge status={booking.status} />
       </div>
 
+      {/* Where to go. You are the assigned technician on this booking, so the
+          customer's address, map pin and a one-tap Google Maps directions link
+          are all available here. */}
+      <div className="mt-3">
+        <ServiceLocationCard
+          address={request?.location ?? null}
+          latitude={request?.latitude ?? null}
+          longitude={request?.longitude ?? null}
+          title="Service location"
+          showDirections
+          emptyMessage="This request has no recorded service location — message the customer for the address."
+        />
+      </div>
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {mapsUrl && (
-          <a
-            href={mapsUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink/80"
-          >
-            <Navigation className="h-3.5 w-3.5" /> Get directions via Google Maps
-          </a>
-        )}
         <Link
           href={`/technician/bookings/${booking.id}`}
           className="inline-flex items-center gap-1.5 rounded-full border border-ink/15 px-3 py-1.5 text-xs font-semibold text-ink/70 hover:bg-canvas"
@@ -201,16 +207,25 @@ function VisitRowControl({ visit }: { visit: VisitRow }) {
   const [notes, setNotes] = useState(visit.notes ?? "");
   const [photoUrl, setPhotoUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function patch(body: Record<string, unknown>) {
     setBusy(true);
+    setError(null);
     try {
-      await fetch(`/api/visits/${visit.id}`, {
+      const res = await fetch(`/api/visits/${visit.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      const json = await res.json().catch(() => ({}));
+      // The response has to be READ. Without this, a refused write — a status
+      // the API does not accept, a lost privilege — refreshed the page and
+      // looked exactly like a save.
+      if (!res.ok) throw new Error(json.error ?? "That change was not saved.");
       router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That change was not saved.");
     } finally {
       setBusy(false);
     }
@@ -274,6 +289,8 @@ function VisitRowControl({ visit }: { visit: VisitRow }) {
           </button>
         )}
       </div>
+
+      {error && <p className="mt-1.5 text-[11px] text-alert-ink">{error}</p>}
 
       {visit.photo_urls.length > 0 && (
         <p className="mt-1.5 text-[11px] text-ink/40">{visit.photo_urls.length} photo(s) attached</p>

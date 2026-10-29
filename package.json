@@ -8,20 +8,32 @@
     "start": "next start",
     "lint": "next lint",
     "test:queue-sql": "node scripts/test-queue-sql.mjs",
+    "test:issues": "node --test scripts/tests/issue-matching.test.mjs scripts/tests/troubleshooting-guides.test.mjs",
+    "test:estimates": "node --test scripts/tests/estimate-costs.test.mjs",
+    "test:auth": "node --test scripts/tests/password-recovery.test.mjs",
+    "test:booking-api": "node --test scripts/tests/booking-outcome-contract.test.mjs",
+    "test:admin-payments": "node --test scripts/tests/admin-payments-queue.test.mjs",
+    "test:messages": "node --test scripts/tests/messages-routing.test.mjs",
+    "test:queue-copy": "node --test scripts/tests/queue-copy.test.mjs",
+    "test:admin-lists": "node --test scripts/tests/admin-list-guards.test.mjs",
+    "cron:tick": "node scripts/run-assignment-tick.mjs",
     "verify:queue": "node scripts/verify-queue-fairness.mjs",
-    "db:check": "node scripts/check-migration-state.mjs"
+    "db:check": "node scripts/check-migration-state.mjs",
+    "audit:bookings": "node scripts/audit-booking-eligibility.mjs"
   },
   "dependencies": {
     "@rive-app/react-canvas": "^4.34.2",
     "@supabase/ssr": "0.5.2",
     "@supabase/supabase-js": "2.45.4",
     "gsap": "^3.15.0",
+    "leaflet": "^1.9.4",
     "lottie-react": "^3.1.2",
     "lucide-react": "^0.383.0",
     "motion": "^13.2.0",
     "next": "14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-leaflet": "^4.2.1",
     "web-push": "^3.6.7"
   },
   "devDependencies": {

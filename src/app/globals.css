@@ -143,12 +143,146 @@ img {
     background-image: linear-gradient(103deg, #eef5ff 0%, #dcebff 54%, #c4dbff 100%);
   }
 
+  /* Keep auth copy on a solid theme-aware plate while the technician photo
+     becomes crisp before the subject, instead of washing the whole image out. */
+  .auth-photo-scrim {
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--spark-surface)) 0%,
+      rgb(var(--spark-surface) / 0.98) 38%,
+      rgb(var(--spark-surface) / 0.88) 48%,
+      rgb(var(--spark-surface) / 0.58) 57%,
+      rgb(var(--spark-surface) / 0.12) 68%,
+      transparent 77%
+    );
+  }
+
+  .service-art-float {
+    animation: service-art-float 3.2s ease-in-out infinite;
+  }
+
+  .service-art-spark {
+    animation: service-art-spark 2.4s ease-in-out infinite;
+  }
+
+  @keyframes service-art-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+
+  @keyframes service-art-spark {
+    0%, 100% { opacity: .72; }
+    50% { opacity: 1; }
+  }
+
+  /* ---------------------------------------------- platform announcement strip
+     The scrolling line inside the dashboard topbar (see
+     `PlatformAnnouncementTicker`). Two identical groups, each at least as wide
+     as the strip, both translating by exactly -100%: group two lands where group
+     one began, so the loop has no seam.
+
+     `min-width: 100%` is what makes a SHORT announcement cross the whole strip.
+     Without it the groups would be only as wide as the text, and the message
+     would loop in a narrow band at the left edge with the rest of the bar empty.
+     `justify-content: flex-end` starts it at the right edge, so the first thing
+     the reader sees is the announcement scrolling in.
+
+     The spacing between repeats is `padding-inline` INSIDE the item, which
+     travels with the content. A `gap` on the container would sit outside the
+     100% each group translates by, so the loop would step over it and read as a
+     jump. */
+  .spark-ticker {
+    display: flex;
+    overflow: hidden;
+  }
+
+  .spark-ticker-group {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 100%;
+    /* Duration is set per announcement, from the measured travel distance. */
+    animation: spark-ticker-scroll 24s linear infinite;
+  }
+
+  .spark-ticker-item {
+    padding-inline: 1.25rem;
+    white-space: nowrap;
+  }
+
+  /* Pausing on hover is the courtesy gesture, not the compliant one: the
+     dismiss button beside the strip is the WCAG 2.2.2 mechanism, and the global
+     `prefers-reduced-motion` rule below stops the scroll outright — the strip
+     then reads as a plain line of text. */
+  .spark-ticker:hover .spark-ticker-group {
+    animation-play-state: paused;
+  }
+
+  @keyframes spark-ticker-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+  }
+
   .spark-navy-gradient {
     background-image: linear-gradient(103deg, #0b1b33 0%, #12305b 62%, #1255c7 100%);
   }
 
   .spark-section {
     @apply mx-auto max-w-6xl px-4 md:px-6;
+  }
+
+  /* ------------------------------------------------------ appliance carousel
+     A continuous horizontal product rail. Cards keep the same size; the
+     wheel, arrow buttons, and dots move the row. There is deliberately no
+     scroll snapping or scale effect, so scrolling left moves the second card
+     into the first slot, the third into the second, and so on. */
+  .appliance-carousel {
+    --appliance-card-width: 168px;
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-block: 0.5rem 1rem;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .appliance-carousel::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Let the final card scroll all the way to the left edge of the rail. */
+  .appliance-carousel-end-spacer {
+    flex: 0 0 calc(100% - var(--appliance-card-width));
+  }
+
+  .appliance-slide {
+    flex: 0 0 var(--appliance-card-width);
+    min-width: 0;
+  }
+
+  .appliance-slide-media {
+    transition: box-shadow 200ms ease-in-out;
+  }
+
+  .appliance-slide.is-active .appliance-slide-media {
+    box-shadow: 0 16px 32px -16px rgba(120, 169, 255, 0.65);
+  }
+
+  @media (min-width: 640px) {
+    .appliance-carousel {
+      --appliance-card-width: 200px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .appliance-carousel {
+      --appliance-card-width: 220px;
+    }
   }
 
   .hero-art {
@@ -182,12 +316,61 @@ img {
   .hero-copy-scrim {
     background-image: linear-gradient(
       103deg,
-      rgba(6, 20, 44, 0.96) 0%,
-      rgba(8, 27, 58, 0.93) 32%,
-      rgba(9, 32, 68, 0.66) 54%,
-      rgba(9, 32, 68, 0.22) 76%,
-      rgba(9, 32, 68, 0.04) 100%
+      rgba(7, 13, 18, 0.97) 0%,
+      rgba(7, 13, 18, 0.94) 32%,
+      rgba(7, 13, 18, 0.72) 54%,
+      rgba(7, 13, 18, 0.28) 76%,
+      rgba(7, 13, 18, 0.06) 100%
     );
+  }
+
+  /* ------------------------------------------------------------ mobile shell
+     Only the pieces Tailwind genuinely cannot express live here; everything
+     else stays a utility in the markup so it stays reviewable next to the
+     component it styles.
+
+     `env(safe-area-inset-*)` is what keeps fixed UI clear of the iPhone home
+     indicator and the Android gesture bar. The fallback `0px` means every other
+     platform (and desktop) resolves to no padding at all, so nothing shifts.
+     These only take effect when the viewport declares `viewport-fit=cover` —
+     see the `viewport` export in `src/app/layout.tsx`. */
+
+  /* The fixed bottom navigation. Hidden from `lg` up, where the sidebar takes
+     over as the primary navigation. `z-30` keeps it below the sticky topbar
+     (`z-40`) and the slide-out drawer plus its scrim (`z-40`/`z-50`), so an open
+     menu always covers the tab bar instead of fighting it. */
+  .spark-bottom-nav {
+    @apply fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* A form's primary action pinned to the bottom of a phone screen. Same
+     safe-area treatment as the nav — and the two are never on screen at once:
+     `/customer/request-repair` is registered as an immersive route, so the tab
+     bar steps aside for the submit button (see `MobileBottomNav`). */
+  .spark-sticky-action {
+    @apply fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Horizontally scrollable rail (stat cards, filter chips). The scrollbar is
+     hidden because on a touch device it is a permanent grey smear along the
+     bottom of the row; the content is still scrollable by swipe. */
+  .spark-scroll-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .spark-scroll-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Minimum comfortable tap area. Apple asks for 44pt, Material for 48dp; 44px
+     is the value both accept, and it is only ever applied to interactive rows —
+     never to a dense data table on desktop. */
+  .spark-tap {
+    min-height: 44px;
   }
 }
 
@@ -207,3 +390,217 @@ img {
     scroll-behavior: auto !important;
   }
 }
+
+/* ------------------------------------------------------- mobile clearance
+   Declared outside `@layer components` and at the end of the sheet so they win
+   the cascade against the column's own `py-5` / `sm:py-6` padding utility —
+   Tailwind v3 emits `@tailwind utilities` in place, so a rule declared after it
+   with equal specificity takes effect. Both are below-`lg` only (`max-width`),
+   so the desktop padding utilities are never touched and no `lg:` reset is
+   needed.
+
+   Without these, the fixed bottom bar covers the last card of every page that
+   has one — and because these bars are `fixed` they contribute no height to the
+   document, so the browser cannot scroll them out of the way.
+
+   The two breakpoints are deliberately different. The tab bar exists below `lg`
+   (the sidebar only becomes the primary navigation at 1024px, because a 256px
+   rail on a 768px tablet leaves ~450px of content), while the sticky submit
+   button is a phone-only control — at 768px the form's own submit row takes
+   over. Reserving button clearance on a tablet would be a dead 6.5rem gap on a
+   page that has no fixed bar at all. */
+
+@media (max-width: 1023.98px) {
+  /* Clearance for the bottom navigation. */
+  .spark-bottom-nav-offset {
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 767.98px) {
+  /* Clearance for a sticky primary action, which is taller than the tab bar
+     because it carries a button rather than a row of icons. */
+  .spark-sticky-action-offset {
+    padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* =========================================================
+   Leaflet map controls
+   ---------------------------------------------------------
+   Leaflet's stock zoom buttons are 26x26px squares with a hairline grey border.
+   That is below the 44px minimum touch target, and on a tile background they are
+   easy to miss entirely — the location picker's most-used control was its
+   smallest. These overrides make them thumb-sized, high-contrast and obviously
+   pressable, on every map in the app (the picker, the saved-location card and
+   the read-only views all render the same Leaflet control).
+
+   The zoom buttons are the only control styled here: the attribution stays as
+   Leaflet renders it, because OSM's usage policy requires it and shrinking it
+   further would make it hard to read.
+   ========================================================= */
+
+.leaflet-control-zoom {
+  border: 0 !important;
+  border-radius: 0.75rem !important;
+  overflow: hidden;
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 0.12),
+    0 8px 20px rgb(15 23 42 / 0.18) !important;
+}
+
+/* `!important` throughout: Leaflet's own sheet sets width/height/line-height and
+   `.leaflet-touch` variants at the same specificity, and this file is loaded
+   before it in some routes. */
+.leaflet-control-zoom a,
+.leaflet-touch .leaflet-control-zoom a {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem !important; /* 44px: the minimum comfortable touch target */
+  height: 2.75rem !important;
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  color: #0e429f !important; /* brand ink, readable on the white buttons */
+  background-color: #ffffff !important;
+  border-bottom: 1px solid rgb(15 23 42 / 0.08);
+  transition: background-color 150ms ease;
+}
+
+.leaflet-control-zoom a:last-child {
+  border-bottom: 0;
+}
+
+.leaflet-control-zoom a:hover {
+  background-color: #eaf1ff !important;
+}
+
+.leaflet-control-zoom a:active {
+  background-color: #dbe6ff !important;
+}
+
+.leaflet-control-zoom a:focus-visible {
+  outline: 2px solid #0e429f;
+  outline-offset: -2px;
+}
+
+/* Leaflet disables the buttons at the zoom limits by giving them this class;
+   keep them visible but clearly inert. */
+.leaflet-control-zoom a.leaflet-disabled {
+  color: rgb(15 23 42 / 0.25) !important;
+  background-color: #f8fafc !important;
+}
+
+/* The map is inside a card with rounded corners, so the control must not sit
+   flush against the edge. */
+.leaflet-top.leaflet-left .leaflet-control {
+  margin-top: 0.75rem;
+  margin-left: 0.75rem;
+}
+
+/* Reference palette for sign-in, sign-up, and authenticated dashboards. It is
+   scoped to those shells so the rest of the product can keep its existing
+   theme while shared components inherit the same dark surfaces and accents. */
+.reference-palette {
+  color-scheme: dark;
+  --spark-canvas: 7 13 18;
+  --spark-surface: 16 25 35;
+  --spark-ink: 245 247 251;
+  --spark-muted: 160 174 186;
+  --spark-line: 42 55 70;
+  --spark-soft: 11 17 24;
+  --spark-brand-ink: 129 237 244;
+  --spark-brand-soft: 19 29 39;
+}
+
+/* The named brand shades are fixed Tailwind values, so map them only inside
+   these surfaces to the purple / cyan from the supplied reference. */
+.reference-palette .bg-brand-50,
+.reference-palette .bg-brand-100,
+.reference-palette .bg-brand-soft {
+  background-color: #131d27;
+}
+
+.reference-palette .bg-brand-200,
+.reference-palette .bg-brand-300,
+.reference-palette .bg-brand-400 {
+  background-color: #81edf4;
+}
+
+.reference-palette .bg-brand-500,
+.reference-palette .bg-brand-600,
+.reference-palette .bg-brand-700 {
+  background-color: #6d70f0;
+}
+
+.reference-palette .bg-brand-800,
+.reference-palette .bg-brand-900 {
+  background-color: #070d12;
+}
+
+.reference-palette .text-brand-300,
+.reference-palette .text-brand-400,
+.reference-palette .text-brand-500,
+.reference-palette .text-brand-600,
+.reference-palette .text-brand-700,
+.reference-palette .text-brand-800,
+.reference-palette .text-brand-900,
+.reference-palette .text-brand-100,
+.reference-palette .text-brand-200 {
+  color: #81edf4;
+}
+
+.reference-palette .border-brand-200,
+.reference-palette .border-brand-300,
+.reference-palette .border-brand-400,
+.reference-palette .ring-brand-200,
+.reference-palette .ring-brand-300,
+.reference-palette .ring-brand-400 {
+  --tw-ring-color: #81edf4;
+  border-color: rgb(129 237 244 / 0.45);
+}
+
+.reference-palette .hover\:bg-brand-400:hover,
+.reference-palette .hover\:bg-brand-500:hover,
+.reference-palette .hover\:bg-brand-600:hover,
+.reference-palette .hover\:bg-brand-700:hover {
+  background-color: #8587ff;
+}
+
+.reference-palette .hover\:border-brand-300:hover,
+.reference-palette .hover\:border-brand-400:hover {
+  border-color: #81edf4;
+}
+
+.reference-palette .hover\:text-brand-ink:hover,
+.reference-palette .focus\:text-brand-ink:focus {
+  color: #81edf4;
+}
+
+.reference-palette .focus\:border-brand-500:focus {
+  border-color: #81edf4;
+}
+
+.reference-palette .focus\:ring-brand-500:focus,
+.reference-palette .focus-visible\:outline-brand-500:focus-visible {
+  --tw-ring-color: #81edf4;
+  outline-color: #81edf4;
+}
+
+.reference-palette .shadow-card {
+  --tw-shadow: 0 18px 42px rgb(0 0 0 / 0.35);
+  --tw-shadow-colored: 0 18px 42px var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
+.reference-palette .shadow-soft {
+  --tw-shadow: 0 10px 24px rgb(109 112 240 / 0.24);
+  --tw-shadow-colored: 0 10px 24px var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
+.reference-palette .spark-hero-gradient {
+  background-image: linear-gradient(103deg, #101923 0%, #171a36 54%, #1b1d43 100%);
+}
+

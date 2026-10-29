@@ -36,9 +36,15 @@ const STATUS_TONES: Record<string, Tone> = {
   pending: "warn",
   confirmed: "brand",
   awaiting_inspection: "warn",
-  // estimates.status
+  // Waiting on the customer's GCash reference and an administrator's verification:
+  // the repair is finished, the transaction is not.
+  awaiting_payment: "info",
+  // estimates.status — `pending` is shared with bookings.status above.
+  draft: "neutral",
+  revision_requested: "warn",
   accepted: "success",
   rejected: "danger",
+  superseded: "neutral",
   // assignment_status / technician offers
   matching: "warn",
   offered: "warn",

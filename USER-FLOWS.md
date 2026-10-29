@@ -25,6 +25,34 @@ it either — `GET /api/service-requests` returns only the caller's own requests
 for a customer, and the queue tables are not readable by the `customer` role at
 all (RLS).
 
+#### Identifying the problem (step 2 of the form)
+
+```
+appliance chosen  →  ONLY that appliance's issue list loads
+                     (no troubleshooting is shown yet)
+describe the problem in English / Tagalog / Bisaya / mixed
+  → deterministic match against reviewed synonyms (src/lib/issue-matching.ts)
+      · one clear match   → "The problem may be: Not cooling. Is this correct?"
+      · several matches   → the customer picks from the list (never guessed)
+      · no match          → pick from the list, or continue without troubleshooting
+  → confirmed / selected  →  that issue's preliminary checks appear INLINE
+  → optional outcome: "Yes, it worked" | "No, the problem remains" | "Skip"
+```
+
+Rules this flow holds to:
+
+* **Selecting an appliance shows no guidance.** The old side-panel card rendered
+  steps as soon as an appliance was picked; guidance now needs an *identified*
+  issue — chosen by the customer, or a detected match they confirmed.
+* **A detected match is only a suggestion.** Nothing is shown, and nothing is
+  stored, until the customer confirms it.
+* **The description is never rewritten** and never turned into a diagnosis.
+* **Nothing here blocks the request.** An unidentified issue, a skipped guide or
+  an unresolved problem all submit normally; the technician diagnoses on site.
+* **An outcome is the customer's report**, not a verified repair: it never
+  completes a request, a booking or a visit, and the customer can still ask for
+  professional service after reporting that it worked.
+
 **The preferred time is a window, not a day.** `readRequestedWindow()`
 (`src/lib/service-time.ts`) accepts either explicit
 `requested_window_start` / `requested_window_end` ISO timestamps or the wizard's
@@ -69,13 +97,101 @@ for *that* window. It is not a dead end — the cron sweep re-runs matching for
 
 The technician is disclosed only once `assignment_status = 'accepted'`, and only
 the published profile fields (name, avatar, bio) — never phone numbers,
-addresses or queue data. The existing repair workflow then continues unchanged:
-estimate → customer approves → booking (`POST /api/bookings`, which re-checks
-conflicts and capacity) → repair → `awaiting_inspection` → customer inspection →
-payment.
+addresses or queue data. The existing repair workflow then continues, with one
+clarification: **approving an estimate and confirming a booking are two separate
+steps.**
+
+| Step | What it means | What it does NOT do |
+| --- | --- | --- |
+| Estimate submitted | the technician proposed an itemized cost | no appointment, no payment |
+| **Estimate approved** | the customer accepted that exact version | does not book, does not pay, does not move the queue |
+| Booking confirmed | the customer picked an available slot and the server accepted it | does not re-approve or change the estimate |
+| Repair → inspection | the work itself | — |
+| Inspection confirmed | the customer attests the appliance works (written note) | opens the payment step; does not complete the repair, does not approve an estimate |
+| Payment verified | an administrator confirmed the GCash reference | does not approve an estimate |
+| **Completed** | the verified payment closing the repair | the only path to completion |
+
+So: estimate → customer **approves** (or asks for a revision, or declines) →
+customer **confirms** a time (schedule conflict and capacity re-checked) → repair
+→ `awaiting_inspection` → the **customer confirms the appliance works** (a written
+note, which is what the archived history keeps) → `awaiting_payment` → the customer
+submits the GCash reference → an **administrator verifies it** → `completed`.
+
+**Confirming a time is one all-or-nothing step.** The customer picks a slot and the
+server either takes it completely or not at all — there is no state in between where
+an appointment half-exists. What that means in practice:
+
+* the slot is checked against that technician's **working hours, time off, existing
+  appointments and capacity** at the moment it is taken, not a moment earlier. Two
+  customers clicking the same hour on the same technician cannot both succeed; the
+  second is told the time clashes and is offered another;
+* an hour is an hour: a job that ends at 12:00 and one that starts at 12:00 do not
+  conflict, but a 10:00–12:00 job blocks an 11:00 start;
+* **one repair has one live appointment.** Pressing the button twice — a double
+  click, or a retry after a slow response — leaves a single booking, and the second
+  attempt is told the request already has one rather than quietly creating another;
+* the refusal is explained in the queue's own words ("…already has an appointment
+  in that window", "…outside the technician's working hours", "…has no capacity left
+  for that time"), so the customer knows what to change. A clash is never reported as
+  a server error;
+* nothing else moves: no queue position, no estimate change, no second charge.
+
+The last step is the only way a repair completes. The customer's confirmation opens
+the payment step; it does not close the repair, and neither the customer nor the
+technician can mark it complete. Only an administrator's verification does — made on
+`/admin/payments`, where each reference shows the repair it belongs to and the row
+reports the outcome (*"Payment verified — the repair is now Completed."*). The same
+transaction records the service history, closes the request and frees the
+technician's slot, and the customer is notified.
+
+If an administrator **rejects** the reference instead, the customer sees the reason on
+this page and the payment form re-opens, so the same repair can be paid for again with
+a correct reference. A rejection does not cancel the appointment, release the
+technician's slot or close the repair — the work is still owed and still at the payment
+step — and there is no refund or penalty involved.
+
+A customer may **cancel their own booking while it is still `pending`** (before the
+technician starts) — the slot is released and the booking stays in the record. The
+request itself returns to "ready to book", so the same repair can be booked again at
+another time with the estimate they already approved and the technician who accepted
+it: nothing is duplicated, no queue turn is spent, and the technician's "current
+load" goes back down by exactly one. Once the repair is under way,
+cancellation goes through support or an administrator. There are no cancellation
+fees and no automatic penalties.
+
+A revised estimate is a new version: the old one keeps its amounts and its
+approval record, and the new total needs its own approval before any additional
+chargeable work starts.
 
 Cancelling or rescheduling after acceptance does **not** hand the technician a
-fresh queue turn; the turn was consumed at acceptance.
+fresh queue turn; the turn was consumed at acceptance. Neither does approving,
+declining or revising an estimate — a decision touches the estimate row and
+nothing else.
+
+### 3a. The service location (map pin) travels with the request
+
+In step 4 of the wizard the customer types their address **and** confirms a point
+on an OpenStreetMap map: tap to drop a pin, drag to correct it, or press
+"Use my location" for a single, permission-gated device lookup (there is no
+continuous tracking, and a denied prompt leaves the address field and the map
+fully usable). Only a *confirmed* pin is submitted; a pin that was placed and
+left unconfirmed blocks the submit with an explicit message rather than being
+silently dropped. The request summary shows both the written address and the
+confirmed coordinates, and the customer's own request page re-renders the saved
+pin when they reopen it.
+
+The location follows the same disclosure rule as the technician's identity:
+
+| State | What a technician sees |
+| --- | --- |
+| offered (not yet accepted) | appliance, problem, photos, requested window — **no address, no pin** |
+| accepted | the address, the map with the customer's pin, and a "Get directions" button |
+| not assigned at all | nothing: the row is not readable through the API, PostgREST or Realtime |
+
+"Get directions" opens Google Maps in a new tab with
+`https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=<lat>,<lng>`,
+falling back to the URL-encoded written address when no pin was saved. Google
+calculates the route; SPARKServ does not, and no Google Maps API key is involved.
 
 ---
 
@@ -185,6 +301,29 @@ a completion trigger would rotate them twice.
 ---
 
 ## Admin
+
+### Verifying and rejecting payments (`/admin/payments`)
+
+Each row shows the reference, the amount, the customer and the repair it belongs to,
+with two actions while the reference is still `pending_verification`:
+
+* **Confirm** verifies it. That is the only way a repair is completed: one
+  transaction closes the booking, archives the service history, closes the request
+  and frees the technician's slot, and the customer is notified.
+* **Reject** refuses it, and **requires a written reason**. The control is
+  deliberately two-step — write the reason, review what the customer will read, then
+  confirm — because the reason is customer-facing text, is recorded against the
+  administrator's account, and is the only explanation the customer gets. The reason
+  is required in the form, by the API and by the database function, so an unexplained
+  rejection cannot happen at any layer.
+
+A rejection is not a refund and not a cancellation. It moves the payment row to
+`rejected`, records who refused it, when and why — and **nothing else**. The repair
+stays exactly where it was (normally at the payment step, still owed), the technician's
+load does not change, no service history is written and no request is re-opened. The
+customer is notified with the reason and can submit a new reference against the same
+repair. A decision is final: once a reference is verified or rejected it cannot be
+decided again, and the customer's next reference is a new row.
 
 ### Queue monitoring (`/admin/technician-queue`)
 

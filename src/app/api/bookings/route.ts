@@ -1,8 +1,54 @@
-import { NextResponse, type NextRequest } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getCurrentUser, AuthError } from "@/lib/auth";
+import { applianceLabel } from "@/lib/queue";
 
-// POST /api/bookings — customer confirms a technician + estimate, creating a booking
+/**
+ * The structured result of `create_booking_atomic()`.
+ *
+ * The database owns the whole booking decision, so this route only translates the
+ * outcome into the right status code. Nothing here re-checks the estimate, the
+ * schedule, the capacity or the technician's eligibility: that would be a second,
+ * weaker copy of rules already enforced inside one transaction.
+ */
+interface BookingOutcome {
+  outcome?: string;
+  reason?: string;
+  message?: string;
+  booking_id?: string;
+  booking?: Record<string, unknown>;
+  request_id?: string;
+  request_status?: string;
+  assignment_status?: string;
+  estimate_status?: string;
+  technician_id?: string;
+  appliance_type?: string;
+  /**
+   * Only on `technician_not_eligible`: does ANY technician currently qualify for
+   * this appliance type? It decides which of the two honest explanations the
+   * customer gets — "nobody covers this appliance" or "the technician assigned to
+   * you is no longer qualified".
+   */
+  qualified_technician_available?: boolean;
+}
+
+// POST /api/bookings â€” the customer confirms an appointment for the estimate they
+// approved.
+//
+// Batch 2: this is now ONE database transaction (`public.create_booking_atomic`,
+// see supabase/migration_atomic_booking.sql). It used to be three separate writes â€”
+// insert the booking, update the request, bump the technician's counter â€” which
+// could half-fail, and it read the schedule before writing with no lock, so two
+// requests could both reserve the same technician for the same hours. Both problems
+// are now closed in the database:
+//
+//   * `uniq_active_booking_per_request` â€” one non-cancelled booking per request;
+//   * `trg_booking_no_overlap` â€” no overlapping appointment for a technician,
+//     serialized on a per-technician advisory lock.
+//
+// A direct insert from the browser is no longer a path at all: the INSERT policies
+// on `bookings` were removed, and the function is service-role only. The customer's
+// identity comes from the session here and is re-verified inside the function.
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -20,129 +66,188 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createClient();
-    const { data: serviceRequest, error: requestError } = await supabase
-      .from("service_requests")
-      .select("id, customer_id, status, assigned_technician_id, assignment_status, requested_duration_minutes")
-      .eq("id", service_request_id)
-      .eq("customer_id", user.id)
-      .single();
-
-    if (requestError || !serviceRequest) {
-      return NextResponse.json({ error: "Service request not found" }, { status: 404 });
-    }
-    if (serviceRequest.assignment_status !== "accepted" || !["quoted", "open"].includes(serviceRequest.status)) {
-      return NextResponse.json({ error: "This service request is not ready to be booked" }, { status: 409 });
-    }
-
-    const { data: estimate, error: estimateError } = await supabase
-      .from("estimates")
-      .select("id, service_request_id, technician_id, status")
-      .eq("id", estimate_id)
-      .single();
-
-    if (
-      estimateError ||
-      !estimate ||
-      estimate.service_request_id !== service_request_id ||
-      estimate.technician_id !== serviceRequest.assigned_technician_id ||
-      estimate.status !== "pending"
-    ) {
-      return NextResponse.json({ error: "Estimate does not match an accepted technician offer" }, { status: 400 });
-    }
-
-    // How long the appointment occupies the technician. Conflict checks and the
-    // daily-hours capacity limit both need it; two hours is the platform default.
-    const bookingMinutes =
-      typeof duration_minutes === "number" && duration_minutes > 0
-        ? Math.round(duration_minutes)
-        : (serviceRequest.requested_duration_minutes ?? 120);
-
-    // Refuse a slot that clashes with the technician's real schedule instead of
-    // storing a double-booking. This is the mirror image of the queue rule: a
-    // future appointment never blocks future offers, but two appointments that
-    // genuinely overlap are physically impossible.
     const scheduledStart = new Date(scheduled_at);
     if (Number.isNaN(scheduledStart.getTime())) {
       return NextResponse.json({ error: "scheduled_at must be a valid date" }, { status: 400 });
     }
-    const scheduledEnd = new Date(scheduledStart.getTime() + bookingMinutes * 60_000);
+
+    // How long the appointment occupies the technician. Passed through when the
+    // caller supplied one; otherwise the database falls back to the duration the
+    // customer asked for with the request, then to the platform default â€” one place
+    // decides, so the two can never disagree.
+    const bookingMinutes =
+      typeof duration_minutes === "number" &&
+      Number.isFinite(duration_minutes) &&
+      duration_minutes > 0
+        ? Math.round(duration_minutes)
+        : null;
 
     const serviceRole = createServiceRoleClient();
-    const { data: conflict, error: conflictError } = await serviceRole.rpc("technician_schedule_conflict", {
-      p_technician_id: estimate.technician_id,
-      p_start: scheduledStart.toISOString(),
-      p_end: scheduledEnd.toISOString(),
-    });
-    if (conflictError) throw conflictError;
-    if (conflict) {
-      return NextResponse.json(
-        {
-          error:
-            "That time clashes with another appointment this technician already has. Please choose a different slot.",
-        },
-        { status: 409 }
-      );
-    }
-
-    const { data: booking, error } = await supabase
-      .from("bookings")
-      .insert({
-        service_request_id,
-        technician_id: estimate.technician_id,
-        estimate_id,
-        customer_id: user.id,
-        scheduled_at,
-        duration_minutes: bookingMinutes,
-        notes: notes ?? null,
-        status: "pending",
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    await supabase
-      .from("service_requests")
-      .update({
-        status: "booked",
-        updated_at: new Date().toISOString(),
-        // The confirmed appointment replaces the (optional) preference the
-        // customer gave with the request, so the queue engine and the schedule
-        // agree on one window.
-        requested_window_start: scheduledStart.toISOString(),
-        requested_window_end: scheduledEnd.toISOString(),
-        requested_duration_minutes: bookingMinutes,
-      })
-      .eq("id", service_request_id);
-    await supabase.from("estimates").update({ status: "accepted" }).eq("id", estimate_id);
-
-    // Capacity is computed from real appointments, so the legacy
-    // `active_job_load` counter is refreshed with the service-role client: a
-    // customer updating a technician row is blocked by RLS, which is why this
-    // counter used to drift.
-    const { data: tech } = await serviceRole
-      .from("technicians")
-      .select("active_job_load")
-      .eq("id", estimate.technician_id)
-      .single();
-    if (tech) {
-      await serviceRole
-        .from("technicians")
-        .update({ active_job_load: tech.active_job_load + 1 })
-        .eq("id", estimate.technician_id);
-    }
-    await serviceRole.rpc("refresh_technician_operational_status", {
-      p_technician_id: estimate.technician_id,
+    const { data, error } = await serviceRole.rpc("create_booking_atomic", {
+      p_request_id: service_request_id,
+      p_estimate_id: estimate_id,
+      p_actor: user.id,
+      p_scheduled_at: scheduledStart.toISOString(),
+      p_duration_minutes: bookingMinutes,
+      p_notes: typeof notes === "string" && notes.trim() ? notes.trim() : null,
     });
 
-    return NextResponse.json({ data: booking }, { status: 201 });
+    if (error) {
+      const code = (error as { code?: string }).code;
+      const message = (error as { message?: string }).message ?? "";
+      // Deployment ahead of database: the function arrives with
+      // migration_atomic_booking.sql. Say which file is missing rather than a bare
+      // 500 â€” and never fall back to writing the booking by hand.
+      if (code === "PGRST202" || /create_booking_atomic/.test(message)) {
+        return NextResponse.json(
+          {
+            error:
+              "Booking is not installed on this database yet. Apply supabase/migration_atomic_booking.sql, then try again.",
+            code: "BOOKING_SETUP_REQUIRED",
+          },
+          { status: 503 }
+        );
+      }
+      throw error;
+    }
+
+    return mapBookingOutcome((data ?? {}) as BookingOutcome);
   } catch (err) {
     return handleError(err);
   }
 }
 
-// GET /api/bookings — list bookings scoped to the caller's role
+/**
+ * Translate the function's outcome into the API's status codes.
+ *
+ * 201 booked Â· 409 for the scheduling and state conflicts the caller can act on Â·
+ * 403/404 for identity and existence Â· 400 for an invalid length. A conflict is
+ * never reported as a 500, and an unrecognised outcome is never reported as success.
+ */
+function mapBookingOutcome(outcome: BookingOutcome) {
+  switch (outcome.outcome) {
+    case "booked":
+      return NextResponse.json({ data: outcome.booking, outcome }, { status: 201 });
+
+    case "already_booked":
+      return NextResponse.json(
+        {
+          error: "This repair request already has an active booking.",
+          code: "already_booked",
+          booking_id: outcome.booking_id ?? null,
+        },
+        { status: 409 }
+      );
+
+    case "request_not_found":
+      return NextResponse.json({ error: "Service request not found" }, { status: 404 });
+
+    case "forbidden":
+      return NextResponse.json(
+        { error: "You can only book your own repair request" },
+        { status: 403 }
+      );
+
+    case "request_not_bookable":
+      return NextResponse.json(
+        {
+          error:
+            outcome.reason === "not_assigned"
+              ? "A technician has not accepted this request yet, so it cannot be booked."
+              : "This service request is not ready to be booked.",
+          outcome,
+        },
+        { status: 409 }
+      );
+
+    case "estimate_invalid":
+      return NextResponse.json(
+        {
+          error:
+            "This estimate is not the currently approved version. Approve the estimate before booking.",
+          outcome,
+        },
+        { status: 409 }
+      );
+
+    case "technician_not_eligible": {
+      // Step 17. The assignment is stale: the request says a technician accepted it,
+      // but under the platform's own rules that technician may no longer take this
+      // appliance type (they dropped the specialization, the account was suspended or
+      // deactivated, or an administrator took them out of the rotation). Nothing was
+      // written — the request keeps its state — so the customer is told the truth and
+      // pointed at a human, rather than being shown a booking that does not exist.
+      const appliance = outcome.appliance_type
+        ? applianceLabel(outcome.appliance_type)
+        : "this appliance";
+      const nobodyCoversIt =
+        outcome.reason === "not_in_queue" && outcome.qualified_technician_available === false;
+
+      const error = nobodyCoversIt
+        ? `No technician currently supports ${appliance} repairs, so this appointment cannot be confirmed. Your request stays open and in line — we will match you with a qualified technician as soon as one is available.`
+        : outcome.reason === "not_in_queue"
+          ? `The technician assigned to this request is no longer qualified to service ${appliance}, so this appointment cannot be confirmed. Please contact support so a different technician can be assigned.`
+          : `The technician assigned to this request is no longer available to take the job, so this appointment cannot be confirmed. Please contact support so a different technician can be assigned.`;
+
+      return NextResponse.json({ error, code: "technician_not_eligible", outcome }, { status: 409 });
+    }
+
+    case "invalid_input":
+      // Unreachable through this route — it validates the four parameters before
+      // calling — but named deliberately, so the contract between the function and
+      // this mapping stays TOTAL: an outcome the function can return is never
+      // answered by the catch-all below, which exists only for outcomes that did
+      // not exist when this route was written.
+      return NextResponse.json(
+        { error: "The booking request is missing something it needs.", outcome },
+        { status: 400 }
+      );
+
+    case "invalid_schedule":
+      return NextResponse.json(
+        { error: "That appointment length is not valid.", outcome },
+        { status: 400 }
+      );
+
+    case "schedule_conflict":
+      return NextResponse.json(
+        {
+          error:
+            outcome.message ??
+            "That time clashes with another appointment this technician already has. Please choose a different slot.",
+          outcome,
+        },
+        { status: 409 }
+      );
+
+    case "outside_availability_window":
+      return NextResponse.json(
+        {
+          error:
+            outcome.message ??
+            "That time is outside the technician's working hours. Please choose another slot.",
+          outcome,
+        },
+        { status: 409 }
+      );
+
+    case "capacity_concurrent_job":
+    case "capacity_daily_jobs":
+    case "capacity_daily_hours":
+      return NextResponse.json(
+        { error: outcome.message ?? "This technician has no capacity left for that time.", outcome },
+        { status: 409 }
+      );
+
+    default:
+      // An outcome this route does not know means the function changed underneath
+      // it. Say so in the log instead of pretending the booking worked.
+      console.error("create_booking_atomic returned an unrecognised outcome", outcome);
+      return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// GET /api/bookings â€” list bookings scoped to the caller's role
 export async function GET() {
   try {
     const user = await getCurrentUser();

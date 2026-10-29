@@ -1,15 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { getCurrentUser, AuthError } from "@/lib/auth";
-import type { BookingStatus, Database } from "@/types/database";
+import type { BookingStatus } from "@/types/database";
 
-const VALID_STATUSES: BookingStatus[] = ["pending", "in_progress", "awaiting_inspection", "completed", "cancelled"];
+const VALID_STATUSES: BookingStatus[] = [
+  "pending",
+  "in_progress",
+  "awaiting_inspection",
+  "awaiting_payment",
+  "completed",
+  "cancelled",
+];
 
 // PATCH /api/bookings/:id — drive the repair lifecycle.
-//   pending → in_progress → awaiting_inspection   (technician)
-//   awaiting_inspection → completed               (customer signs off)
-//   anything active → cancelled                   (staff)
+//
+//   pending → in_progress → awaiting_inspection   (technician, or staff)
+//   pending → cancelled                            (the customer, before work
+//                                                   starts; staff any time)
+//   awaiting_inspection → awaiting_payment         (the CUSTOMER only: their
+//                                                   written sign-off, with the
+//                                                   inspection note)
+//   awaiting_payment → completed                   (NOT here — an administrator
+//                                                   verifying the payment, via
+//                                                   confirm_payment())
+//
+// The database enforces every one of these rules independently
+// (enforce_booking_update_rules + the RLS policies in
+// supabase/migration_rls_workflow_enforcement.sql), so this route is the
+// friendly-message layer rather than the boundary.
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -49,11 +67,16 @@ export async function PATCH(
         (isTechnician &&
           ((booking.status === "pending" && status === "in_progress") ||
             (booking.status === "in_progress" && status === "awaiting_inspection"))) ||
-        (isCustomer && booking.status === "awaiting_inspection" && status === "completed") ||
+        // The customer attests their own inspection, which advances the repair to
+        // the payment step — it does not complete it. Cancelling their own booking
+        // is allowed only while it is still `pending` (before work starts); after
+        // that they use support or an administrator.
+        (isCustomer &&
+          ((booking.status === "awaiting_inspection" && status === "awaiting_payment") ||
+            (booking.status === "pending" && status === "cancelled"))) ||
         (isStaff &&
           ((booking.status === "pending" && status === "in_progress") ||
             (booking.status === "in_progress" && status === "awaiting_inspection") ||
-            (booking.status === "awaiting_inspection" && status === "completed") ||
             (booking.status !== "completed" && status === "cancelled")));
       if (!allowed) {
         return NextResponse.json({ error: "Invalid booking status transition" }, { status: 409 });
@@ -64,12 +87,35 @@ export async function PATCH(
       throw new AuthError("Only the technician or staff can set the final cost", 403);
     }
 
-    // Closing a job is the customer attesting that the repair actually works.
-    // Requiring a written confirmation makes an accidental click recoverable
-    // and gives the archived service_history row something meaningful to say.
-    if (status === "completed" && isCustomer && !String(inspection_note ?? "").trim()) {
+    if (final_cost != null && (!Number.isFinite(Number(final_cost)) || Number(final_cost) < 0)) {
       return NextResponse.json(
-        { error: "Please confirm what you inspected before closing this repair." },
+        { error: "final_cost must be a non-negative number" },
+        { status: 400 }
+      );
+    }
+
+    // The customer's payment step pays exactly `final_cost`, and /api/payments
+    // refuses to accept a payment while it is null. So a technician must record
+    // the cost before handing the job to the customer for inspection.
+    if (
+      status === "awaiting_inspection" &&
+      booking.final_cost == null &&
+      final_cost == null
+    ) {
+      return NextResponse.json(
+        { error: "Enter the final repair cost before sending the job for inspection." },
+        { status: 400 }
+      );
+    }
+
+    // Confirming a satisfactory inspection is the customer attesting that the
+    // repair actually works. Requiring a written confirmation makes an accidental
+    // click recoverable and gives the archived service_history row something
+    // meaningful to say. The confirmation advances to the payment step — it does
+    // not complete the repair; an administrator's payment verification does that.
+    if (status === "awaiting_payment" && isCustomer && !String(inspection_note ?? "").trim()) {
+      return NextResponse.json(
+        { error: "Please confirm what you inspected before continuing to payment." },
         { status: 400 }
       );
     }
@@ -77,7 +123,7 @@ export async function PATCH(
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (status) updates.status = status;
     if (final_cost != null) updates.final_cost = final_cost;
-    if (status === "completed" && isCustomer) {
+    if (status === "awaiting_payment" && isCustomer) {
       updates.inspection_confirmed_at = new Date().toISOString();
       updates.inspection_note = String(inspection_note).trim();
     }
@@ -96,15 +142,24 @@ export async function PATCH(
     // deliberately no queue call anywhere in this handler (QUEUE-SYSTEM.md §18-§20).
     // What does need updating is their cached operational status, so the queue
     // screens show ON_JOB/AVAILABLE/SCHEDULED correctly after a transition.
+    //
+    // Completion is deliberately absent here: it happens inside confirm_payment(),
+    // together with the service_history row, the request status and the technician
+    // counters, in one transaction. A status change that reaches `completed`
+    // through this route is refused above and by the database.
     const serviceRole = createServiceRoleClient();
 
-    if (status === "completed") {
-      await handleCompletion(supabase, serviceRole, updated);
-    } else if (status === "cancelled") {
-      await handleCancellation(serviceRole, updated);
-    }
+    // Cancelling does NOT release the technician's slot here any more. Step 18's
+    // AFTER UPDATE trigger on `bookings` (`release_slot_after_booking_cancel`) does
+    // it inside the same transaction as this status change, so the counter cannot
+    // drift when a second call fails — and a cancellation written anywhere else
+    // (an administrator, a service-role script) releases too. See
+    // supabase/migration_cancel_release.sql.
 
-    if (status && booking.technician_id) {
+    // That trigger also refreshes the cached operational status for a cancellation,
+    // so this call is only for the other transitions. Re-issuing it here would be a
+    // second round trip for a value the database has just written.
+    if (status && status !== "cancelled" && booking.technician_id) {
       await serviceRole.rpc("refresh_technician_operational_status", {
         p_technician_id: booking.technician_id,
       });
@@ -116,93 +171,16 @@ export async function PATCH(
   }
 }
 
-/**
- * Releases the technician's job slot when a booking is cancelled. Without
- * this, active_job_load only ever grows and the technician's "current load"
- * never reflects reality.
- *
- * Note the deliberate absence of any queue call: a cancellation does not reset
- * the technician to the front of the rotation, and does not cost them a second
- * turn either (§18).
- */
-async function handleCancellation(
-  supabase: SupabaseClient<Database>,
-  booking: { technician_id: string }
-) {
-  const { data: tech } = await supabase
-    .from("technicians")
-    .select("active_job_load")
-    .eq("id", booking.technician_id)
-    .single();
-
-  if (tech) {
-    await supabase
-      .from("technicians")
-      .update({ active_job_load: Math.max(0, tech.active_job_load - 1) })
-      .eq("id", booking.technician_id);
-  }
-}
-
-async function handleCompletion(
-  supabase: ReturnType<typeof createClient>,
-  serviceRole: SupabaseClient<Database>,
-  booking: {
-    id: string;
-    customer_id: string;
-    technician_id: string;
-    service_request_id: string;
-    final_cost: number | null;
-    inspection_note: string | null;
-  }
-) {
-  const { data: serviceRequest } = await supabase
-    .from("service_requests")
-    .select("appliance_type")
-    .eq("id", booking.service_request_id)
-    .single();
-
-  await supabase.from("service_history").insert({
-    booking_id: booking.id,
-    customer_id: booking.customer_id,
-    technician_id: booking.technician_id,
-    appliance_type: serviceRequest?.appliance_type ?? "unknown",
-    final_cost: booking.final_cost,
-    summary: booking.inspection_note
-      ? `Repair completed. Customer inspection: ${booking.inspection_note}`
-      : "Repair completed.",
-  });
-
-  await supabase
-    .from("service_requests")
-    .update({ status: "completed", updated_at: new Date().toISOString() })
-    .eq("id", booking.service_request_id);
-
-  // free up the technician's job slot and bump their completed count. Done with
-  // the service-role client: when the CUSTOMER closes the job, RLS blocks them
-  // from updating the technicians table, which is why this counter used to drift.
-  const { data: tech } = await serviceRole
-    .from("technicians")
-    .select("active_job_load, jobs_completed")
-    .eq("id", booking.technician_id)
-    .single();
-
-  if (tech) {
-    const completed = tech.jobs_completed + 1;
-    await serviceRole
-      .from("technicians")
-      .update({
-        active_job_load: Math.max(0, tech.active_job_load - 1),
-        jobs_completed: completed,
-        // once a tech clears 5 completed jobs they graduate out of "new" status
-        is_new: completed < 5,
-      })
-      .eq("id", booking.technician_id);
-  }
-
-  // Deliberately NOTHING queue-related here. The technician moved to the end of
-  // the rotation when they accepted this request; completing it must not move
-  // them again (§20).
-}
+// The technician-slot release used to live here, as a second RPC call AFTER the
+// status change had already committed. That is exactly what step 18 removes: the
+// release is now the `release_slot_after_booking_cancel` trigger on `bookings`, in
+// the same transaction as the cancellation, for every writer. See
+// supabase/migration_cancel_release.sql.
+//
+// Completion never lived here either: it runs inside `confirm_payment()` — the same
+// transaction that verifies the payment — so a repair can never be closed without a
+// verified payment, and a half-failed completion is impossible. See
+// `supabase/migration_rls_workflow_enforcement.sql`.
 
 function handleError(err: unknown) {
   if (err instanceof AuthError) {

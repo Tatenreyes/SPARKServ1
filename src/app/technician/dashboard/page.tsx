@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
-import { getTechnicianQueue } from "@/lib/assignment";
+import { getTechnicianQueue, getTechnicianPendingOffers } from "@/lib/assignment";
 import { buildApplianceQueues, type ApplianceQueue } from "@/lib/queue";
-import { DashboardPanel, DashboardStatCard } from "@/components/DashboardCard";
+import type { TechnicianPendingOfferRow } from "@/types/database";
+import { DashboardPanel, DashboardStatGroup } from "@/components/DashboardCard";
 import DashboardHero from "@/components/DashboardHero";
 import QueueCard from "@/components/QueueCard";
 import ScheduleTimeline, { type ScheduleItem } from "@/components/ScheduleTimeline";
@@ -24,12 +25,19 @@ export default async function TechnicianDashboard() {
   const user = await getCurrentUser();
   const supabase = createClient();
 
-  const { data: pendingOffers } = await supabase
-    .from("service_requests")
-    .select("*")
-    .eq("assigned_technician_id", user!.id)
-    .eq("assignment_status", "offered")
-    .order("created_at", { ascending: false });
+  // Pending offers are counted through `technician_pending_offers()` — the one
+  // read path that returns an unaccepted offer without its address or
+  // coordinates (supabase/migration_service_location.sql). Selecting the rows
+  // directly would either leak the service location or return nothing at all
+  // under the tightened policy.
+  let pendingOffers: TechnicianPendingOfferRow[] = [];
+  try {
+    pendingOffers = await getTechnicianPendingOffers(supabase, user!.id);
+  } catch {
+    // The dashboard must never fail over the offer counter; the offer list on
+    // /technician/estimate-requests reports the real state.
+    pendingOffers = [];
+  }
 
   const { count: activeJobs } = await supabase
     .from("bookings")
@@ -119,7 +127,7 @@ export default async function TechnicianDashboard() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <DashboardHero
         eyebrow="Technician workspace"
         title={`${greeting}, ${user?.name?.split(" ")[0] ?? "there"}`}
@@ -142,6 +150,48 @@ export default async function TechnicianDashboard() {
             Review offers
           </Link>
         }
+      />
+
+      {/* Figures before the rotation list. The queue panel below renders every
+          technician in the rotation, which on a phone is a long scroll before
+          anything else on the page — so the four counts come first, as a 2x2
+          tile grid, and the detail follows. On desktop the same order reads as a
+          scoreboard above the detail. */}
+      <DashboardStatGroup
+        items={[
+          {
+            label: "Pending offers",
+            value: pendingOffers?.length ?? 0,
+            href: "/technician/estimate-requests",
+            icon: BriefcaseBusiness,
+            colorClass: "bg-warn-soft text-warn-ink",
+            hint: (pendingOffers?.length ?? 0) > 0 ? "Respond before they lapse" : "Nothing waiting",
+          },
+          {
+            label: "Active jobs",
+            value: activeJobs ?? 0,
+            href: "/technician/jobs",
+            icon: Wrench,
+            colorClass: "bg-brand-soft text-brand-ink",
+            hint: "Open job list",
+          },
+          {
+            label: "Upcoming",
+            value: upcomingSchedules ?? 0,
+            href: "/technician/jobs",
+            icon: CalendarClock,
+            colorClass: "bg-brand-soft text-brand-ink",
+            hint: "See schedule",
+          },
+          {
+            label: "Completed today",
+            value: completedToday ?? 0,
+            href: "/technician/jobs",
+            icon: CheckCircle2,
+            colorClass: "bg-signal-soft text-signal-ink",
+            hint: "View history",
+          },
+        ]}
       />
 
       <DashboardPanel
@@ -173,41 +223,6 @@ export default async function TechnicianDashboard() {
           )}
         </div>
       </DashboardPanel>
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <DashboardStatCard
-          label="Pending offers"
-          value={pendingOffers?.length ?? 0}
-          href="/technician/estimate-requests"
-          icon={BriefcaseBusiness}
-          colorClass="bg-warn-soft text-warn-ink"
-          hint={(pendingOffers?.length ?? 0) > 0 ? "Respond before they lapse" : "Nothing waiting"}
-        />
-        <DashboardStatCard
-          label="Active jobs"
-          value={activeJobs ?? 0}
-          href="/technician/jobs"
-          icon={Wrench}
-          colorClass="bg-brand-soft text-brand-ink"
-          hint="Open job list"
-        />
-        <DashboardStatCard
-          label="Upcoming"
-          value={upcomingSchedules ?? 0}
-          href="/technician/jobs"
-          icon={CalendarClock}
-          colorClass="bg-brand-soft text-brand-ink"
-          hint="See schedule"
-        />
-        <DashboardStatCard
-          label="Completed today"
-          value={completedToday ?? 0}
-          href="/technician/jobs"
-          icon={CheckCircle2}
-          colorClass="bg-signal-soft text-signal-ink"
-          hint="View history"
-        />
-      </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <DashboardPanel

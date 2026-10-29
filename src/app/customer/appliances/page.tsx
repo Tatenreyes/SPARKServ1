@@ -61,22 +61,54 @@ export default function AppliancesPage() {
   });
 
   const [reloadKey, setReloadKey] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  /** Which appliance is awaiting a delete confirmation, and how that request went. */
+  const [deleteTarget, setDeleteTarget] = useState<Appliance | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadAppliances() {
       setLoading(true);
+      setLoadError(null);
       const { data, error } = await supabase
         .from("appliances")
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (!error && data) {
-        setAppliances(data);
+      if (error) {
+        // A failed read must not render as "No appliances registered yet": the
+        // customer would re-add a unit that is already on file.
+        setLoadError("We could not load your appliances just now.");
+      } else {
+        setAppliances(data ?? []);
       }
       setLoading(false);
     }
     loadAppliances();
   }, [supabase, reloadKey]);
+
+  /**
+   * Removal goes through `DELETE /api/appliances/:id`, not the browser client.
+   * The route re-checks the session and scopes the delete to the caller, and —
+   * unlike a raw client call — it reports a refusal, so a delete that did not
+   * happen cannot look like one that did.
+   */
+  async function handleDelete(appliance: Appliance) {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/appliances/${appliance.id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? "Could not remove this appliance.");
+      setDeleteTarget(null);
+      setReloadKey((prev) => prev + 1);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not remove this appliance.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function openCreate() {
     setEditingId(null);
@@ -284,7 +316,17 @@ export default function AppliancesPage() {
         </div>
       )}
 
-      {loading ? (
+      {loadError ? (
+        <div className="rounded-2xl border border-alert-500/30 bg-alert-soft p-6 text-center">
+          <p className="text-sm font-semibold text-alert-ink">{loadError}</p>
+          <button
+            onClick={() => setReloadKey((prev) => prev + 1)}
+            className="mt-3 rounded-full bg-alert-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-alert-700"
+          >
+            Try again
+          </button>
+        </div>
+      ) : loading ? (
         <div className="py-12 text-center text-sm text-muted">Loading appliances...</div>
       ) : appliances.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-ink/20 bg-soft/50 p-12 text-center">
@@ -325,17 +367,49 @@ export default function AppliancesPage() {
                   <Pencil className="h-3.5 w-3.5" /> Edit
                 </button>
                 <button
-                  onClick={async () => {
-                    if (confirm("Delete this appliance?")) {
-                      await supabase.from("appliances").delete().eq("id", appliance.id);
-                      setReloadKey((prev) => prev + 1);
-                    }
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDeleteTarget(appliance);
                   }}
                   className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-alert-ink transition hover:border-line hover:text-alert-ink"
                 >
                   <Trash2 className="h-3.5 w-3.5" /> Delete
                 </button>
               </div>
+
+              {deleteTarget?.id === appliance.id && (
+                <div className="rounded-xl border border-alert-500/30 bg-alert-soft/60 p-3">
+                  <p className="text-xs font-semibold text-alert-ink">
+                    Remove this {appliance.appliance_type.toLowerCase()}?
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-alert-ink/80">
+                    Its repair history stays on your account, but the appliance will no
+                    longer be offered when you request a repair.
+                  </p>
+                  {deleteError && (
+                    <p className="mt-1.5 text-[11px] text-alert-ink">{deleteError}</p>
+                  )}
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleDelete(appliance)}
+                      disabled={deleting}
+                      className="rounded-full bg-alert-500 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-alert-600 disabled:opacity-50"
+                    >
+                      {deleting ? "Removing..." : "Yes, remove it"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDeleteTarget(null);
+                        setDeleteError(null);
+                      }}
+                      disabled={deleting}
+                      className="rounded-full border border-ink/15 px-3.5 py-1.5 text-xs font-medium text-ink/70 disabled:opacity-50"
+                    >
+                      Keep it
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

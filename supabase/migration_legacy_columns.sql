@@ -1,0 +1,47 @@
+-- =========================================================
+-- Migration: retire the legacy NOT NULL column the appliance-centric flow replaced
+-- ---------------------------------------------------------
+-- WHY THIS FILE EXISTS
+-- The live database was created before the appliance-centric flow landed, so
+-- migration_sync_live_schema.sql only ADDED the columns the application writes.
+-- The columns those ones superseded are still present, and one of them is NOT
+-- NULL with no default:
+--
+--   service_requests.issue_description   -> superseded by problem_description
+--
+-- Nothing in the application writes issue_description any more (the only place
+-- the name survives is migration_sync_live_schema.sql, copying its text into
+-- problem_description), so every customer-submitted request is rejected by
+-- PostgreSQL with
+--
+--   23502  null value in column "issue_description" violates not-null constraint
+--
+-- which the API turns into a blanket HTTP 500. That is the same class of failure
+-- the sync migration was written to stop — it simply moved to a column the app
+-- no longer populates.
+--
+-- WHY DROP NOT NULL AND NOT DROP COLUMN
+-- Dropping the constraint is enough to unblock the flow, keeps the original text
+-- of pre-existing rows readable, and is trivially reversible. Dropping the column
+-- is the eventual end state (supabase/schema.sql has no such column), but it
+-- throws away that history — do it only once nothing needs the old text.
+--
+-- Related, deliberately NOT changed here:
+--   appliances.name is also NOT NULL, but it is not legacy in that sense —
+--   supabase/schema.sql keeps it, and both the appliances page and the request
+--   wizard now supply a value.
+--
+-- Idempotent: dropping a NOT NULL constraint that is already absent is a no-op.
+-- =========================================================
+
+alter table public.service_requests
+  alter column issue_description drop not null;
+
+-- ---------- Verify ----------
+-- Run this afterwards; expect is_nullable = 'YES':
+--
+--   select column_name, is_nullable
+--   from information_schema.columns
+--   where table_schema = 'public'
+--     and table_name = 'service_requests'
+--     and column_name = 'issue_description';

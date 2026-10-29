@@ -17,6 +17,9 @@ sparkserv/
 ├── src/
 │   ├── app/
 │   │   ├── (auth)/login, register        # public auth pages
+│   │   ├── (auth)/forgot-password,
+│   │   │   update-password               # password recovery (see section 3)
+│   │   ├── auth/callback                 # recovery link → server-side session
 │   │   ├── customer/                     # customer dashboard, requests, bookings
 │   │   ├── technician/                   # technician dashboard, jobs
 │   │   ├── admin/                        # technician approval, overview
@@ -84,6 +87,85 @@ Visit `http://localhost:3000`.
    immediately after signing up. Turn it back on before going live.
 6. **Realtime** is enabled by default for the `messages` table via the
    schema above — no extra step needed for the in-app chat to work live.
+
+### Password reset (forgot password)
+
+`/forgot-password` → `/auth/callback` → `/update-password`. The request form calls
+`supabase.auth.resetPasswordForEmail(email, { redirectTo })`; the emailed link comes
+back to `/auth/callback`, which performs the PKCE exchange on the server, writes the
+session, and only then redirects to the password form. No password is ever handled by
+the app's own code or database — `auth.users` stays owned by Supabase Auth, and the
+update is `supabase.auth.updateUser({ password })` against the session that the link
+created.
+
+**Dashboard changes this feature needs.** None of them are applied by the code, so
+check them before testing:
+
+| Where | What | Value |
+| --- | --- | --- |
+| Authentication → URL Configuration → **Site URL** | canonical app URL | `https://<your-domain>` |
+| Authentication → URL Configuration → **Redirect URLs** | every origin a reset can be requested from, each ending in `/auth/callback` | `http://localhost:3000/auth/callback`, `https://<your-domain>/auth/callback`, plus `https://*-<team>.vercel.app/auth/callback` if preview deployments are used |
+| Authentication → Emails → **Reset Password** | the template | default `{{ .ConfirmationURL }}` — see below |
+| Authentication → Providers → **Email** | must stay enabled (registration already uses it) | enabled |
+| Authentication → Providers → Email → **Password requirements** | keep in step with `MIN_PASSWORD_LENGTH` | minimum 6 |
+
+Why the allow-list matters: Supabase refuses a `redirect_to` that is not listed and
+falls back to the **Site URL**, so an unlisted origin turns the emailed link into a dead
+end. The app builds the redirect from `window.location.origin`, so each origin needs
+exactly one entry — the `/auth/callback` URL — and nothing else.
+
+The reset email can be configured two ways, and `/auth/callback` handles both:
+
+1. **Default template** (`{{ .ConfirmationURL }}`) — Supabase verifies the token on its
+   own domain and redirects to `/auth/callback?code=…`; the route exchanges that code
+   for a session (`exchangeCodeForSession`). Nothing to change.
+2. **Template linking straight at the app** — point the link at
+   `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/update-password`
+   and the route verifies it with `verifyOtp({ type: "recovery", token_hash })`. Only
+   `type=recovery` is accepted, so a signup or email-change token can never be spent on
+   a password reset.
+
+Two operational notes:
+
+* **Email rate limits.** The built-in Supabase sender is heavily throttled (a few
+  messages per hour, project-wide) and answers `429`. The form reports that as
+  "Too many reset emails have been requested recently" instead of a generic failure.
+  Configure **Project Settings → Auth → SMTP** before relying on this in production.
+* **No migration.** There is no schema change, no profile column and no RPC: the
+  recovery flow only uses Supabase Auth endpoints.
+
+Recovery authorization is bound to the session the link created, not to "anybody
+logged in". `/auth/callback` mints an httpOnly `sparkserv-recovery` cookie whose
+value is a signed payload naming the recovery **user id** and the **session id**
+of that exchange (`src/lib/auth/recovery-marker.ts`, signed with a key derived
+from `SUPABASE_SERVICE_ROLE_KEY` — already required server-side; if it is absent
+the callback issues no marker and the flow refuses rather than falling back to an
+unsigned cookie). `/update-password` renders the form only when that marker
+matches the user the auth server reports *and* the session id of the session it
+just validated, and only until the payload's 15-minute expiry.
+
+The consequences are the point of the design:
+
+* signing out and signing back in normally gets a new session id, so the marker
+  stops matching even while the cookie is still in the jar;
+* a different account signing in in the same browser matches neither the user id
+  nor the session id;
+* a visitor who merely knows the `/update-password` URL holds nothing, because
+  the marker cannot be minted without the server's signing key;
+* after a successful change the form `DELETE`s the marker
+  (`/api/auth/recovery`) and ends the recovery session, so the authorization is
+  both cleared and already unusable.
+
+Anything else — no marker, no session, an expired payload, a forged, unsigned,
+truncated or tampered value — shows the "This link can't be used" panel instead.
+
+Two notes for operators: the marker is signed with a key derived from
+`SUPABASE_SERVICE_ROLE_KEY`, so if that variable is missing from the deployment
+every recovery link ends on "This link can't be used" rather than being accepted
+without a signature; and the binding uses the `session_id` claim of the access
+token Supabase issues, which every current project includes (if a project ever
+stopped issuing it, recovery would fail closed the same way — the manual pass in
+`TESTING.md` §4 catches it immediately).
 
 ### Upgrading an existing database
 
@@ -259,10 +341,10 @@ gets committed, since it holds your Supabase keys.
 ## 7. What's implemented vs. simplified
 
 This is a realistic but capstone-scoped build. Implemented end-to-end:
-auth + role routing, service request submission, rule-based chatbot,
-technician scoring/ranking, estimates, booking, status tracking
-(Pending → In Progress → Completed), realtime messaging, admin technician
-approval, and super-admin role management.
+auth + role routing, password recovery (forgot password — see section 3), service
+request submission, rule-based chatbot, technician scoring/ranking, estimates,
+booking, status tracking (Pending → In Progress → Completed), realtime
+messaging, admin technician approval, and super-admin role management.
 
 Deliberately simplified / left as extension points:
 - **Payments**: no payment gateway is wired in. If you add one, keep in
@@ -272,7 +354,9 @@ Deliberately simplified / left as extension points:
 - **Image uploads** (e.g. appliance photos, proof-of-repair) aren't
   included — Supabase Storage would be the natural place to add this.
 - **Notifications** (email/SMS/push) aren't wired in — Supabase has
-  built-in email triggers you could extend, or a service like Resend.
+  built-in email triggers you could extend, or a service like Resend. The
+  password-reset email in §3 is Supabase Auth's own sender, not a
+  notification pipeline.
 - **Ratings** have a table + RLS policy ready in the schema, but no UI form
   yet — a natural next page to add on the customer booking-detail view
   once a booking's status is `completed`.

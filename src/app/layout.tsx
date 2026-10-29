@@ -1,6 +1,5 @@
-import type { Metadata } from "next";
-export const dynamic = "force-dynamic";
-import { Space_Grotesk, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google"; 
+import type { Metadata, Viewport } from "next";
+import { Space_Grotesk, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import { STORAGE_KEY } from "@/lib/theme";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -31,6 +30,23 @@ export const metadata: Metadata = {
     icon: "/images/Logo.PNG",
     apple: "/images/Logo.PNG",
   },
+};
+
+/**
+ * `viewportFit: "cover"` is what makes `env(safe-area-inset-bottom)` resolve to a
+ * real number on a notched phone. Without it the bottom navigation and the
+ * sticky form actions sit under the home indicator, where they are partly
+ * unreachable. `themeColor` themes the Android/iOS browser chrome to match the
+ * app canvas so the page does not read as a letterboxed web page on a phone.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F5F7FB" },
+    { media: "(prefers-color-scheme: dark)", color: "#080D1A" },
+  ],
 };
 
 /**

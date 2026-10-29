@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, CheckCircle2, Clock, TimerIcon } from "lucide-react";
+import { AlertTriangle, Loader2, CheckCircle2, Clock, TimerIcon } from "lucide-react";
 import type { AssignmentStatus } from "@/types/database";
 import { customerAssignmentCopy } from "@/lib/queue";
 
@@ -15,12 +15,20 @@ export default function AssignmentStatusCard({
   applianceType,
   technician,
   offersExpiresAt,
+  qualifiedTechnicianAvailable = null,
   onBackToAppliances,
 }: {
   status: AssignmentStatus;
   applianceType: string;
   technician: AssignedTechnicianInfo | null;
   offersExpiresAt?: string | null;
+  /**
+   * Whether ANY technician covers this appliance, when the caller knows. `false` turns
+   * the `waiting` card from "you are in the queue" into "nobody services this yet" —
+   * the two look identical otherwise, and only one of them is worth waiting for.
+   * `null` (the default) means the caller does not know and the neutral wording is used.
+   */
+  qualifiedTechnicianAvailable?: boolean | null;
   onBackToAppliances?: () => void;
 }) {
   // Customers get states, never positions (spec §13, §31). The wording lives in
@@ -28,23 +36,27 @@ export default function AssignmentStatusCard({
   // tracking view can't drift apart; "matching", "offered" and "waiting" are
   // genuinely different waits and used to look identical.
   if (status === "matching" || status === "offered" || status === "waiting") {
-    const copy = customerAssignmentCopy(status);
-    const shell =
-      status === "waiting"
+    // "Nobody covers this appliance" is not a queue position, it is a dead end, so it
+    // is the one `waiting` variant that gets a warning tone instead of the calm one.
+    const nobodyCoversIt = status === "waiting" && qualifiedTechnicianAvailable === false;
+    const copy = customerAssignmentCopy(status, { qualifiedTechnicianAvailable });
+    const shell = nobodyCoversIt
+      ? "rounded-card border border-warn-ink/30 bg-warn-soft p-6"
+      : status === "waiting"
         ? "rounded-card border border-spark-400/30 bg-brand-soft p-6"
         : status === "offered"
           ? "rounded-card border border-line bg-brand-soft/60 p-8"
           : "rounded-card border border-ink/8 bg-surface p-8";
-    const Icon = status === "waiting" ? Clock : Loader2;
+    const Icon = nobodyCoversIt ? AlertTriangle : status === "waiting" ? Clock : Loader2;
 
     return (
       <div className={`flex flex-col items-center gap-3 text-center ${shell}`}>
         <Icon
           className={`h-6 w-6 ${
-            status === "matching"
+            status === "matching" || status === "offered"
               ? "animate-spin text-brand-ink"
-              : status === "offered"
-                ? "animate-spin text-brand-ink"
+              : nobodyCoversIt
+                ? "text-warn-ink"
                 : "text-brand-ink"
           }`}
         />

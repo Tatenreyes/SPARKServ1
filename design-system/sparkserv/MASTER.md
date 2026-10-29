@@ -55,9 +55,8 @@ hex.
 | Class family | Light | Dark | Use for |
 |---|---|---|---|
 | `canvas` | `#F5F7FB` | `#080D1A` | page background |
-| `surface` | `#FFFFFF` | `#11192A` | cards, panels, floating plates |
-| `elevated` | `#FFFFFF` | `#182338` | popovers, modals, menus |
-| `soft` | `#EDF1F5` | `#0F1B2E` | wells, inset strips, icon discs |
+| `surface` | `#FFFFFF` | `#11192A` | cards, panels, floating plates, popovers |
+| `soft` (alias `mist`) | `#EDF1F5` | `#0F1B2E` | wells, inset strips, hover fills, icon discs |
 | `line` | `#DFE5EC` | `#24334D` | hairlines, dividers, borders |
 | `ink` / `muted` | `#10264A` / `#52637C` | `#E2E8F0` / `#94A3B8` | body / secondary copy |
 | `brand-soft` / `brand-ink` | `#EEF5FF` / `#0E429F` | `#152B4F` / `#78A9FF` | tinted chips, brand text |
@@ -93,10 +92,15 @@ module receives the client-reference object, so the interpolation renders
 key — persisted dark mode silently stops working while the browser still looks
 correct.
 
-**The toggle** (`ThemeToggle` → `ThemeProvider`) starts as `null` and touches
-`document` only inside an effect, so server HTML, the first client render and
-the pre-paint script always agree. The cost is that the icon settles one frame
-after hydration, which is cheaper than a hydration mismatch or a wrong SSR icon.
+**The context** (`ThemeProvider`) starts as `null` and touches `document` only
+inside an effect, so server HTML, the first client render and the pre-paint
+script always agree. `src/components/ThemeToggle.tsx` was removed in this
+release, and nothing consumes `useTheme()` today: the theme still follows the
+stored choice (or the OS preference, via the pre-paint script), but there is
+currently **no in-app control** to switch it. A toggle added back must keep the
+same rule — read nothing browser-only while rendering, and let the icon settle
+one frame after hydration, which is cheaper than a hydration mismatch or a wrong
+SSR icon.
 
 ### Typography
 
@@ -193,11 +197,11 @@ sticky topbar + sidebar + content column.
 
 | Part | Rule |
 |------|------|
-| Topbar | 64px, sticky, `bg-white/95` + `backdrop-blur`, hairline bottom border. Holds brand, a role pill (dot + label), notifications and the user menu. |
-| Sidebar | 240px (`w-64`), navy `#0B1B33`, **identical for every role**. Role identity is a 6px dot in the topbar, never a recoloured shell — four different sidebar colours made the product read as four different products. |
+| Topbar | 64px, sticky, `bg-white/95` + `backdrop-blur`, hairline bottom border. Holds brand, a role pill (dot + label), notifications and the user menu. Grows to 96px when `platform_announcement` is set: a 32px strip inside the header scrolls the announcement right-to-left (`PlatformAnnouncementTicker`). Anything with a sticky offset below the header — `Sidebar`, the request wizard's summary rail — is written against **both** heights. |
+| Sidebar | 240px (`w-64`), navy `#0B1B33`, **identical for every role**. Role identity is a 6px dot in the topbar, never a recoloured shell — four different sidebar colours made the product read as four different products. Collapsible on desktop to a 76px icon rail (hover/focus tooltips, group click re-opens it); the choice persists in `localStorage` and the content column expands to fill the freed width. |
 | Active nav row | `bg-brand-500` (`#1255C7`) pill. Colour changes only; geometry never changes, so navigation can't shift layout. |
 | Mobile | The sidebar becomes a slide-over drawer (`fixed`, `translate-x`) with a scrim; state lives in `DashboardShell`, not in the route layouts. |
-| Content | `max-w-[1400px]` centred, `px-4 → lg:px-8`. |
+| Content | `max-w-[1800px]` centred (full width on typical desktops), `px-4 → lg:px-8`. |
 | Nav config | `src/lib/navConfig.ts`. It is client-side on purpose: items carry lucide *components*, which can't be serialized from a server layout into a client shell. |
 
 **Gradients.** Permitted on three surfaces and nowhere else:
