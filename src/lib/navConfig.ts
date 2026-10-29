@@ -85,15 +85,16 @@ export function navForRole(role: UserRole): SidebarNavItem[] {
           label: "Service Requests",
           icon: Wrench,
           children: [
-            // The index of the section: every request this customer has submitted.
-            // It was reachable from the dashboard tile and the phone hub, but the
-            // sidebar had no entry for it at all.
-            { label: "Repair Requests", href: "/customer/repairs/requests", icon: ClipboardList },
             { label: "Service Inquiry", href: "/customer/request-repair", icon: Plus },
             { label: "Estimates", href: "/customer/estimates", icon: ClipboardList },
             { label: "Bookings", href: "/customer/bookings", icon: CalendarClock },
             { label: "Repair Progress", href: "/customer/progress-tracking", icon: Timer },
             { label: "Service History", href: "/customer/repair-history", icon: ClipboardList },
+            // Deliberately last: this is where a customer goes to look over — or
+            // remove — a request they have already submitted, not the first thing
+            // they need. The page itself was reachable from the dashboard tile and
+            // the phone hub, but the sidebar had no entry for it at all.
+            { label: "Repair Requests", href: "/customer/repairs/requests", icon: ClipboardList },
           ],
         },
         {
