@@ -2,9 +2,9 @@
 
 Two automated harnesses cover the queue, one covers the multilingual issue matcher,
 one covers the estimate money rules, one covers the password-recovery rules, one
-covers the booking outcome contract, and one covers the shared admin-list guards.
-They answer different questions, and **all** are needed before the work can be called
-done.
+covers the booking outcome contract, one covers the shared admin-list guards, and one
+covers the customer-facing assignment state. They answer different questions, and
+**all** are needed before the work can be called done.
 
 | Command | Runs against | Proves | Cannot prove |
 | --- | --- | --- | --- |
@@ -14,6 +14,7 @@ done.
 | `npm run test:auth` | the real `src/lib/auth/recovery.ts`, `src/lib/auth/recovery-marker.ts` and `src/lib/password.ts`, run directly by Node 24 | the **password-recovery rules**: the minimum/maximum length and the mismatch rule, the duplicate-submission guards, the callback decision table (exchange a PKCE code, verify a `token_hash`, refuse an expired or wrong-type link), the open-redirect guard on `next`, the error-to-copy mapping that keeps the request form from disclosing whether an account exists, and the **recovery authorization binding** — that the marker is signed and names one user and one session, so it is refused for a visitor with no recovery session, for the same account after an ordinary sign-in, for a different account in the same browser, after a completed reset, and when it is expired, forged, unsigned or tampered — plus source guardrails (no token logging, no service-role client, no identifier sent to `updateUser`) | the rendered React components, a real recovery email, the live project's redirect allow-list, and the browser's cookie handling — §4 has the manual pass |
 | `npm run verify:queue` | the **live Supabase project** from `.env.local` | the **deployed system**: real RLS, real GRANTs, real `auth.uid()`, RPC exposure through PostgREST | anything about the browser UI |
 | `npm run test:admin-lists` | the real `src/lib/booking-status.ts` and `src/lib/query-rows.ts`, plus the two admin listing pages and `TechnicianJobsClient`, read as text | the **shared guards**: that "active" is one four-status list consumed by both booking monitors and the technician job list (never re-listed inline, which is how the two pages drifted apart), that every listing query goes through `requireRows()` and no page reads a query result unguarded, that the guard throws with the query name and the database code while never logging `details`/`hint`, that `/admin/bookings` is a redirect into the merged list and the merged list kept that page's one unique column, and that a refused visit write is surfaced instead of looking saved | the rendered React tree, a real PostgREST failure, and the numbers the pages actually display |
+| `npm run test:tracking` | `src/app/customer/dashboard/page.tsx`, `src/components/ServiceTracking.tsx`, `src/app/customer/service-request/[id]/page.tsx`, `src/components/RequestDetailClient.tsx` and `src/lib/assignment-coverage.ts`, read as text | the **customer-facing assignment state**: that the "Active repairs" tile opens the customer's own request list instead of the legacy alias that redirects to the new-request wizard; that the tracking strip takes a coverage answer and, when the database has confirmed that nobody covers the appliance, replaces "next: technician assigned" with the shared dead-end wording plus a support link; that coverage is re-read on the server for unassigned requests only; and that the check degrades to `null` (neutral wording) when it cannot run | the rendered React tree, and the live answer (`appliance_has_qualified_technician()` needs the live project) |
 | `npm run test:booking-api` | `supabase/migration_atomic_booking.sql`, `migration_booking_eligibility.sql` and `src/app/api/bookings/route.ts`, read as text | the **wiring** between the booking function and the route: every outcome `create_booking_atomic()` can return (including the three it passes through from `technician_capacity_failure()`) has a `case` in the route, the route's only `201` is the `booked` case, the `default:` branch answers `500` and never `201`, and the `technician_not_eligible` case is a `409` naming the appliance | the behaviour itself (group 26) and anything that needs a request/response runner — there is none in this repository |
 
 A green PGlite run means "the SQL is sound". A green `test:issues` run means "the
@@ -22,7 +23,9 @@ the total that gets stored". A green `test:auth` run means "the recovery rules a
 callback's decisions behave". A green `test:booking-api` run means "the route knows
 every outcome the booking function can return". A green `test:admin-lists` run means
 "the admin lists share one definition of active, and a failed read cannot render as an
-empty list". A green live run means "the deployed
+empty list". A green `test:tracking` run means "the dashboard and the request page tell
+the customer the truth about their assignment — including when nobody covers the
+appliance". A green live run means "the deployed
 system behaves that way". None substitutes for another.
 
 ---

@@ -20,6 +20,12 @@ interface RequestDetailClientProps {
   assignedTechnician: AssignedTechnician | null;
   /** IANA zone the queue and the booking clocks run on (e.g. Asia/Manila). */
   serviceTimeZone: string;
+  /**
+   * Whether ANY technician covers this appliance, when the server could confirm it.
+   * `false` is what turns the "waiting" card from "you are in the queue" into
+   * "nobody services this yet"; `null` (unknown) keeps the neutral wording.
+   */
+  qualifiedTechnicianAvailable?: boolean | null;
 }
 
 export default function RequestDetailClient({
@@ -27,6 +33,7 @@ export default function RequestDetailClient({
   initialEstimates,
   assignedTechnician,
   serviceTimeZone,
+  qualifiedTechnicianAvailable = null,
 }: RequestDetailClientProps) {
   // Only versions the customer may see (RLS already hides drafts), newest first.
   const versions = initialEstimates
@@ -87,6 +94,7 @@ export default function RequestDetailClient({
             applianceType={request.appliance_type}
             technician={assignedTechnician}
             offersExpiresAt={request.offers_expires_at}
+            qualifiedTechnicianAvailable={qualifiedTechnicianAvailable}
           />
         )}
       </section>

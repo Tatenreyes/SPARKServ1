@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Check, ClipboardList, Plus } from "lucide-react";
+import { AlertTriangle, Check, ClipboardList, Plus } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
+import { customerAssignmentCopy } from "@/lib/queue";
 import type { BookingRow, EstimateRow, ServiceRequestRow } from "@/types/database";
 
 type TrackingStep = {
@@ -52,12 +53,23 @@ export function ServiceTracking({
   request,
   bookings = [],
   estimates = [],
+  qualifiedTechnicianAvailable = null,
 }: {
   request: ServiceRequestRow | null;
   /** Bookings for this request, newest first. */
   bookings?: BookingRow[];
   /** Estimates for this request, newest first. */
   estimates?: EstimateRow[];
+  /**
+   * Whether ANY technician currently covers this appliance, when the caller knows.
+   *
+   * `false` means the database has CONFIRMED that nobody does, which turns the
+   * last line from "next: technician assigned" — a promise this platform cannot
+   * keep — into the dead-end wording, with somewhere to go. `true` keeps the
+   * normal line, and `null` (the default: the caller does not know) also keeps it,
+   * because the strip must not claim a cause it has not confirmed.
+   */
+  qualifiedTechnicianAvailable?: boolean | null;
 }) {
   if (!request) {
     return (
@@ -140,6 +152,24 @@ export function ServiceTracking({
 
   const currentIndex = steps.reduce((last, step, index) => (step.done ? index : last), 0);
   const nextStep = steps.find((step) => !step.done);
+
+  /**
+   * The dead end, said out loud.
+   *
+   * An unassigned request whose appliance type has NO qualified technician is not
+   * "waiting for a technician to be assigned" — nothing is coming, and the
+   * customer needs to contact support rather than keep checking back. The wording
+   * is the shared `customerAssignmentCopy`, so this strip, the request page and
+   * the estimate card cannot drift apart.
+   */
+  const nobodyCoversIt =
+    !cancelled &&
+    !completed &&
+    !request.assigned_technician_id &&
+    qualifiedTechnicianAvailable === false;
+  const deadEndCopy = nobodyCoversIt
+    ? customerAssignmentCopy("waiting", { qualifiedTechnicianAvailable: false })
+    : null;
 
   return (
     <div className="px-5 py-5">
@@ -240,15 +270,31 @@ export function ServiceTracking({
         ))}
       </ol>
 
-      <p className="mt-4 border-t border-line pt-4 text-xs leading-relaxed text-muted">
-        {cancelled
-          ? "This request was cancelled. You can start a new inquiry any time."
-          : completed
-            ? "All done — thanks for choosing SPARKServ."
-            : nextStep
-              ? `Next up: ${nextStep.label.toLowerCase()}.`
-              : ""}
-      </p>
+      {deadEndCopy ? (
+        <div className="mt-4 border-t border-line pt-4">
+          <p className="flex items-start gap-1.5 text-xs font-semibold text-warn-ink">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {deadEndCopy.title}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">{deadEndCopy.body}</p>
+          <Link
+            href="/customer/support"
+            className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-ink hover:underline"
+          >
+            Contact support
+          </Link>
+        </div>
+      ) : (
+        <p className="mt-4 border-t border-line pt-4 text-xs leading-relaxed text-muted">
+          {cancelled
+            ? "This request was cancelled. You can start a new inquiry any time."
+            : completed
+              ? "All done — thanks for choosing SPARKServ."
+              : nextStep
+                ? `Next up: ${nextStep.label.toLowerCase()}.`
+                : ""}
+        </p>
+      )}
     </div>
   );
 }

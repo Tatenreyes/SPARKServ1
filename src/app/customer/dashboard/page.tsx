@@ -6,6 +6,7 @@ import DashboardHero from "@/components/DashboardHero";
 import DashboardServiceIllustration from "@/components/DashboardServiceIllustration";
 import { ServiceTracking } from "@/components/ServiceTracking";
 import { QuickActions } from "@/components/QuickActions";
+import { applianceCoverage } from "@/lib/assignment-coverage";
 import { formatPeso, type MobileAction } from "@/lib/customer-actions";
 import {
   CalendarCheck2,
@@ -101,6 +102,16 @@ export default async function CustomerDashboard() {
         (estimate) => estimate.service_request_id === trackedRequest.id
       )
     : [];
+
+  // Does anybody actually cover this appliance? Only asked when the request has no
+  // technician, because that is the one case where the answer changes what the
+  // customer should do: "we are still matching you" and "nobody can take this"
+  // look identical on the strip, and only one of them is worth waiting for.
+  // `null` (the check could not run) leaves the neutral wording in place.
+  const trackedCoverage =
+    trackedRequest && !trackedRequest.assigned_technician_id
+      ? await applianceCoverage(trackedRequest.appliance_type)
+      : null;
 
   /**
    * The Action centre.
@@ -265,7 +276,10 @@ export default async function CustomerDashboard() {
           {
             label: "Active repairs",
             value: activeRequests.length,
-            href: "/customer/service-request",
+            // The list of this customer's requests — NOT `/customer/service-request`,
+            // which is a legacy alias that redirects to the new-request wizard, so
+            // the tile used to open a blank "service inquiry" form.
+            href: "/customer/repairs/requests",
             icon: Wrench,
             colorClass: "bg-brand-soft text-brand-ink",
             hint: "View requests",
@@ -368,6 +382,7 @@ export default async function CustomerDashboard() {
               request={trackedRequest}
               bookings={trackedBookings}
               estimates={trackedEstimates}
+              qualifiedTechnicianAvailable={trackedCoverage}
             />
           </DashboardPanel>
 

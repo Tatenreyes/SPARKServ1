@@ -16,6 +16,7 @@
     "test:messages": "node --test scripts/tests/messages-routing.test.mjs",
     "test:queue-copy": "node --test scripts/tests/queue-copy.test.mjs",
     "test:admin-lists": "node --test scripts/tests/admin-list-guards.test.mjs",
+    "test:tracking": "node --test scripts/tests/customer-tracking.test.mjs",
     "cron:tick": "node scripts/run-assignment-tick.mjs",
     "verify:queue": "node scripts/verify-queue-fairness.mjs",
     "db:check": "node scripts/check-migration-state.mjs",
