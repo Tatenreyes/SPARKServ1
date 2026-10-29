@@ -8,8 +8,10 @@ import { ServiceTracking } from "@/components/ServiceTracking";
 import { QuickActions } from "@/components/QuickActions";
 import { applianceCoverage } from "@/lib/assignment-coverage";
 import { isClosedRequestStatus } from "@/lib/estimate-costs";
+import { customerAssignmentCopy } from "@/lib/queue";
 import { formatPeso, type MobileAction } from "@/lib/customer-actions";
 import {
+  AlertTriangle,
   CalendarCheck2,
   ClipboardList,
   DollarSign,
@@ -87,10 +89,13 @@ export default async function CustomerDashboard() {
         .order("created_at", { ascending: false })
     : { data: [] };
 
-  // The request the tracking strip follows: the newest still-open one, falling
-  // back to the most recent request so a customer whose jobs are all finished
-  // sees their last one rather than an empty state.
-  const trackedRequest = activeRequests[0] ?? requests?.[0] ?? null;
+  // The request the tracking strip follows: the newest LIVE one. There is deliberately
+  // no fallback to a finished request — "Service tracking" means what is happening now,
+  // and a completed or cancelled repair belongs to Service history. The fallback that
+  // used to be here drew a full seven-step rail for a closed job, under a heading that
+  // claimed to be tracking it.
+  const trackedRequest = activeRequests[0] ?? null;
+
   const trackedBookings = trackedRequest
     ? (bookings ?? [])
         .filter((booking) => booking.service_request_id === trackedRequest.id)
@@ -104,14 +109,40 @@ export default async function CustomerDashboard() {
       )
     : [];
 
-  // Does anybody actually cover this appliance? Only asked when the request has no
-  // technician, because that is the one case where the answer changes what the
-  // customer should do: "we are still matching you" and "nobody can take this"
-  // look identical on the strip, and only one of them is worth waiting for.
-  // `null` (the check could not run) leaves the neutral wording in place.
+  /**
+   * Has this repair actually started moving? The rail is seven steps, and only from
+   * step 2 is there anything to TRACK: a request that is still `waiting`/`matching`
+   * with no estimate and no appointment is a request, not progress, and drawing step 1
+   * of 7 for it under "Service tracking" is what made an untouched request look like
+   * work in flight.
+   *
+   * A booking or a non-draft estimate implies an accepted assignment (both are written
+   * only for the assigned technician), but the assignment is checked first because it
+   * is the earliest of the three.
+   */
+  const trackedHasProgress = Boolean(
+    trackedRequest &&
+      (trackedRequest.assignment_status === "accepted" ||
+        trackedBookings.length > 0 ||
+        trackedEstimates.some((estimate) => estimate.status !== "draft"))
+  );
+
+  // Coverage is asked only for the one state that has no rail to carry the answer: a
+  // live request nobody has taken. Asking about a request that is already moving — or
+  // finished — would be a wasted round trip.
   const trackedCoverage =
-    trackedRequest && !trackedRequest.assigned_technician_id
+    trackedRequest && !trackedHasProgress && !trackedRequest.assigned_technician_id
       ? await applianceCoverage(trackedRequest.appliance_type)
+      : null;
+
+  /**
+   * The dead end, on the dashboard: nobody covers this appliance, so there is nothing
+   * to wait for. Same shared wording as the request page and the strip, so the three
+   * cannot drift apart — and it replaces the rail rather than sitting beside it.
+   */
+  const coverageNotice =
+    trackedRequest && !trackedHasProgress && trackedCoverage === false
+      ? customerAssignmentCopy("waiting", { qualifiedTechnicianAvailable: false })
       : null;
 
   /**
@@ -359,36 +390,70 @@ export default async function CustomerDashboard() {
           </div>
         ) : (
           <p className="px-4 py-4 text-sm text-muted sm:px-5">
-            We’ll let you know when there’s something to review. You can check your repair progress below.
+            We’ll let you know when there’s something to review.
+            {trackedHasProgress ? " You can check your repair progress below." : ""}
           </p>
         )}
         </section>
 
         <div className="space-y-5 md:space-y-0 md:contents">
-          <DashboardPanel
-            title="Service tracking"
-            icon={Wrench}
-            className="md:order-3 md:col-span-2 xl:col-span-12"
-            action={
-              <Link
-                href="/customer/progress-tracking"
-                className="text-xs font-semibold text-brand-ink hover:underline"
-              >
-                View all
-              </Link>
-            }
-          >
-            {/* Bound to the real request/booking/estimate rows — this strip used
-                to be a hardcoded bar with a fixed caption. */}
-            <ServiceTracking
-              request={trackedRequest}
-              bookings={trackedBookings}
-              estimates={trackedEstimates}
-              qualifiedTechnicianAvailable={trackedCoverage}
-            />
-          </DashboardPanel>
+          {/* The rail exists only when there is progress to show. A request that is
+              still waiting for a technician, or one that is already finished, has
+              nothing for a seven-step tracker to report — and drawing step 1 of 7 for
+              it is what made an untouched request look like work in flight. */}
+          {trackedHasProgress && trackedRequest && (
+            <DashboardPanel
+              title="Service tracking"
+              icon={Wrench}
+              className="md:order-3 md:col-span-2 xl:col-span-12"
+              action={
+                <Link
+                  href="/customer/progress-tracking"
+                  className="text-xs font-semibold text-brand-ink hover:underline"
+                >
+                  View all
+                </Link>
+              }
+            >
+              {/* Bound to the real request/booking/estimate rows — this strip used
+                  to be a hardcoded bar with a fixed caption. */}
+              <ServiceTracking
+                request={trackedRequest}
+                bookings={trackedBookings}
+                estimates={trackedEstimates}
+                qualifiedTechnicianAvailable={trackedCoverage}
+              />
+            </DashboardPanel>
+          )}
 
-
+          {/* No rail to draw, but the customer still needs the one fact that changes
+              what they should do about it: nobody covers this appliance, so waiting is
+              pointless. Same shared wording as the request page. */}
+          {coverageNotice && trackedRequest && (
+            <div className="rounded-card border border-warn-ink/30 bg-warn-soft p-4 shadow-card sm:p-5 md:order-3 md:col-span-2 xl:col-span-12">
+              <p className="flex items-start gap-1.5 text-sm font-semibold text-warn-ink">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                {coverageNotice.title}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-warn-ink/80">
+                {coverageNotice.body}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  href="/customer/support"
+                  className="inline-flex h-9 items-center rounded-lg bg-warn-ink px-4 text-xs font-semibold text-white transition hover:opacity-90"
+                >
+                  Contact support
+                </Link>
+                <Link
+                  href={`/customer/service-request/${trackedRequest.id}`}
+                  className="inline-flex h-9 items-center rounded-lg border border-warn-ink/30 px-4 text-xs font-semibold text-warn-ink transition hover:bg-surface"
+                >
+                  View your request
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="space-y-5 md:space-y-0 md:contents">

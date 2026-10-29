@@ -118,7 +118,13 @@ test("the coverage helper asks the same predicate the queue and booking use", ()
 test("the dashboard reads coverage only for an unassigned request and passes it down", () => {
   const page = source(DASHBOARD);
   assert.match(page, /import \{ applianceCoverage \} from "@\/lib\/assignment-coverage"/);
-  assert.match(page, /trackedRequest && !trackedRequest\.assigned_technician_id/);
+  // Asked only for a request that has NO rail of its own to carry the answer: an
+  // unassigned request with nothing to track. A moving repair, and a finished one,
+  // must not pay for the round trip.
+  assert.match(
+    page,
+    /trackedRequest && !trackedHasProgress && !trackedRequest\.assigned_technician_id\s*\n\s*\? await applianceCoverage/
+  );
   assert.match(page, /qualifiedTechnicianAvailable=\{trackedCoverage\}/);
 });
 
@@ -159,4 +165,48 @@ test("paging keeps the customer in the view they are in", () => {
   assert.match(list, /const pageHref = \(target: number\) =>/);
   assert.match(list, /href=\{pageHref\(page - 1\)\}/);
   assert.match(list, /href=\{pageHref\(page \+ 1\)\}/);
+});
+
+// ------------------------- 5. the tracking rail only exists when there is progress
+
+test("a finished request is never shown as being tracked", () => {
+  const page = source(DASHBOARD);
+
+  assert.match(page, /const trackedRequest = activeRequests\[0\] \?\? null;/);
+  assert.doesNotMatch(
+    page,
+    /activeRequests\[0\] \?\? requests\?\.\[0\]/,
+    "the fallback to the most recent request drew a seven-step rail for a closed job"
+  );
+});
+
+test("the rail is drawn only once the repair has started moving", () => {
+  const page = source(DASHBOARD);
+
+  assert.match(
+    page,
+    /const trackedHasProgress = Boolean\(\s*\n\s*trackedRequest &&\s*\n\s*\(trackedRequest\.assignment_status === "accepted" \|\|\s*\n\s*trackedBookings\.length > 0 \|\|\s*\n\s*trackedEstimates\.some\(\(estimate\) => estimate\.status !== "draft"\)\)/
+  );
+  assert.match(
+    page,
+    /\{trackedHasProgress && trackedRequest && \(\s*\n\s*<DashboardPanel/,
+    "the panel must be behind that condition, not rendered unconditionally"
+  );
+});
+
+test("the dead end is still said out loud, as a notice instead of a rail", () => {
+  const page = source(DASHBOARD);
+  assert.match(
+    page,
+    /customerAssignmentCopy\("waiting", \{ qualifiedTechnicianAvailable: false \}\)/
+  );
+  assert.match(page, /\{coverageNotice && trackedRequest && \(/);
+  assert.match(page, /href="\/customer\/support"/);
+});
+
+test("the dashboard does not promise progress 'below' when the rail is hidden", () => {
+  assert.match(
+    source(DASHBOARD),
+    /trackedHasProgress \? " You can check your repair progress below\." : ""/
+  );
 });
