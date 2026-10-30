@@ -25,6 +25,8 @@ import { readFileSync } from "node:fs";
 const ROOT = new URL("../../", import.meta.url);
 const WIZARD = "src/components/RequestRepairWizard.tsx";
 const wizard = readFileSync(new URL(WIZARD, ROOT), "utf8");
+const PANEL = "src/components/TroubleshootingPanel.tsx";
+const panel = readFileSync(new URL(PANEL, ROOT), "utf8");
 
 // -------------------------------------------------- 1. the rule
 
@@ -138,4 +140,52 @@ test("changing the appliance, issue or description clears the outcome", () => {
     [...wizard.matchAll(/setTroubleshootingOutcome\(null\)/g)].length >= 3,
     "the outcome must be reset when what it referred to changes"
   );
+});
+
+// -------------------------------------------------- 5. the assistant in panel 2
+
+test("the assistant answers in a bubble that already contains the checks", () => {
+  assert.match(panel, /SPARKServ assistant/, "it is a conversation, not a form section");
+  assert.match(panel, /That sounds like/, "the reply is a sentence, not a field label");
+  assert.equal(
+    [...panel.matchAll(/guide\.map\(/g)].length,
+    1,
+    "one pass over the guide: every check is rendered at once, never one per turn"
+  );
+  assert.match(panel, /NO_GUIDE_MESSAGE/, "a fault with no guide must say so, never guess");
+});
+
+test("each check can be ticked off, and the progress is honest", () => {
+  assert.match(panel, /const \[doneSteps, setDoneSteps\] = useState<string\[\]>\(\[\]\);/);
+  assert.match(panel, /function toggleStep\(/);
+  assert.match(panel, /aria-pressed=\{done\}/);
+  assert.match(panel, /\{doneCount\} of \{stepCount\} done/);
+  assert.match(
+    panel,
+    /setDoneSteps\(\[\]\);\s*\n\s*\}, \[identifiedIssueId\]\);/,
+    "a different fault means a different checklist — the ticks must reset with the issue"
+  );
+});
+
+test("one question, two answers, and the skip stays in one place", () => {
+  assert.match(panel, /Did that fix it\?/);
+  assert.equal(
+    [...panel.matchAll(/<OutcomeButton/g)].length,
+    2,
+    "Skip is the header control; offering it a second time made one decision look like two"
+  );
+  assert.doesNotMatch(panel, /onOutcomeChange\("skipped"\)/);
+  assert.match(panel, /onClick=\{onSkip\}/);
+});
+
+test("the safety disclaimer is never dropped from the chat", () => {
+  assert.match(panel, /\{TROUBLESHOOTING_DISCLAIMER\}/);
+});
+
+test("the panel carries no resolved note, because that state never renders it", () => {
+  // A resolved outcome replaces the entire form with the wizard's own screen, so a
+  // "recorded as resolved" note in the panel could never be seen.
+  assert.doesNotMatch(panel, /outcome === "resolved" &&/);
+  assert.match(panel, /outcome === "unresolved" &&/);
+  assert.match(panel, /outcome === "skipped" &&/);
 });
