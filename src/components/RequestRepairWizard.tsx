@@ -693,7 +693,7 @@ export default function RequestRepairWizard() {
         {/* `spark-signal-card` is not decoration: it is the opt-in that keeps this card's
             copy dark on the pale signal surface inside the reference palette (see
             globals.css). Without it the title inherits the palette's near-white `text-ink`
-            and disappears into the mint — the submitted card below carries it for exactly
+            and disappears into the mint — the submitted card above carries it for exactly
             the same reason. */}
         <div className="spark-signal-card rounded-2xl border border-line bg-signal-soft p-8 text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-signal-500 text-white">
