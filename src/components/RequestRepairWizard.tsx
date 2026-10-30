@@ -20,12 +20,19 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import AssignmentStatusCard from "@/components/AssignmentStatusCard";
+import DateSelect from "@/components/DateSelect";
+import FieldCounter from "@/components/FieldCounter";
 import ServiceLocationPicker from "@/components/ServiceLocationPicker";
 import TroubleshootingPanel from "@/components/TroubleshootingPanel";
 import {
   getApplianceIssues,
   getIssueById,
 } from "@/lib/appliance-issues";
+import {
+  MAX_MODEL_NUMBER_LENGTH,
+  MAX_SERIAL_NUMBER_LENGTH,
+  cleanCode,
+} from "@/lib/appliance-fields";
 import { matchIssue, type TroubleshootingOutcome } from "@/lib/issue-matching";
 import { getTroubleshootingGuide } from "@/lib/troubleshooting";
 import CollapsibleSection from "@/components/mobile/CollapsibleSection";
@@ -560,8 +567,8 @@ export default function RequestRepairWizard() {
             name: applianceName,
             appliance_type: applianceType,
             brand: brand || null,
-            model_number: modelNumber || null,
-            serial_number: serialNumber || null,
+            model_number: cleanCode(modelNumber, MAX_MODEL_NUMBER_LENGTH) || null,
+            serial_number: cleanCode(serialNumber, MAX_SERIAL_NUMBER_LENGTH) || null,
             purchase_date: purchaseDate || null,
             warranty_status: warrantyStatus,
             warranty_expiry_date: warrantyExpiryDate || null,
@@ -860,10 +867,12 @@ export default function RequestRepairWizard() {
                 id="appliance-model"
                 value={modelNumber}
                 onChange={(e) => setModelNumber(e.target.value)}
+                maxLength={MAX_MODEL_NUMBER_LENGTH}
                 autoComplete="off"
                 className={FIELD}
                 placeholder="e.g. RT32K5530S8"
               />
+              <FieldCounter value={modelNumber} max={MAX_MODEL_NUMBER_LENGTH} />
             </div>
             <div className="min-w-0">
               <label htmlFor="appliance-serial" className="mb-1.5 block text-sm font-medium text-ink/80">
@@ -873,21 +882,19 @@ export default function RequestRepairWizard() {
                 id="appliance-serial"
                 value={serialNumber}
                 onChange={(e) => setSerialNumber(e.target.value)}
+                maxLength={MAX_SERIAL_NUMBER_LENGTH}
                 autoComplete="off"
                 className={FIELD}
                 placeholder="From the rating label"
               />
+              <FieldCounter value={serialNumber} max={MAX_SERIAL_NUMBER_LENGTH} />
             </div>
             <div className="min-w-0">
-              <label htmlFor="appliance-purchase-date" className="mb-1.5 block text-sm font-medium text-ink/80">
-                Purchase date
-              </label>
-              <input
+              <DateSelect
                 id="appliance-purchase-date"
-                type="date"
+                label="Purchase date"
                 value={purchaseDate}
-                onChange={(e) => setPurchaseDate(e.target.value)}
-                className={FIELD}
+                onChange={setPurchaseDate}
               />
             </div>
 

@@ -19,6 +19,7 @@
     "test:tracking": "node --test scripts/tests/customer-tracking.test.mjs",
     "test:removal": "node --test scripts/tests/request-removal.test.mjs",
     "test:inquiry-flow": "node --test scripts/tests/inquiry-flow.test.mjs",
+    "test:appliance-fields": "node --test scripts/tests/appliance-fields.test.mjs",
     "cron:tick": "node scripts/run-assignment-tick.mjs",
     "verify:queue": "node scripts/verify-queue-fairness.mjs",
     "db:check": "node scripts/check-migration-state.mjs",

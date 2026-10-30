@@ -820,6 +820,15 @@ See the RPC table in `QUEUE-SYSTEM.md`. The architectural point:
 
 ## Known state worth flagging
 
+- **`appliances.model_number` and `.serial_number` are unbounded `text`, and the 40-character
+  cap is not in the database.** Both screens write those columns straight through the RLS
+  client, so the limit lives in the field (`maxLength`), in the payload builder
+  (`cleanCode()` in `src/lib/appliance-fields.ts`) and in the suite — but a direct PostgREST
+  write can still store more, because a check constraint is the only real enforcement and it
+  needs a migration. Deliberately not taken here: migration 19 is reserved for
+  `withdraw_service_request()`. The same applies to `purchase_date` — the picker refuses a
+  future date, while the column itself would accept one.
+
 - **Every migration in the upgrade path is applied — steps 1–18.**
   `npm run db:check` exits 0 and reports all 18 applied (76 checks passed), with
   `create_booking_atomic()` and `release_technician_slot()` (step 15),

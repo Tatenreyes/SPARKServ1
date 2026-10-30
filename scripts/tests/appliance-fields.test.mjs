@@ -1,0 +1,228 @@
+/**
+ * Unit tests for the appliance fields: model number, serial number, purchase date.
+ *
+ *   npm run test:appliance-fields
+ *
+ * These run the REAL module (`src/lib/appliance-fields.ts`) — Node 24 strips the
+ * TypeScript types, so there is no build step and no duplicated copy of the rules
+ * to drift. The two screens are also read as text, because the caps have to be
+ * WIRED INTO the fields, not merely defined.
+ *
+ * What is NOT covered here: the rendered selects themselves (see TESTING.md for
+ * the manual pass) and anything that needs the live database.
+ */
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+import {
+  COUNTER_VISIBLE_WITHIN,
+  MAX_MODEL_NUMBER_LENGTH,
+  MAX_SERIAL_NUMBER_LENGTH,
+  MIN_PURCHASE_YEAR,
+  cleanCode,
+  daysInMonth,
+  formatIsoDate,
+  isFutureMonth,
+  lastSelectableDay,
+  parseIsoDate,
+  purchaseYears,
+  showsCounter,
+  toIsoDate,
+} from "../../src/lib/appliance-fields.ts";
+
+const ROOT = new URL("../../", import.meta.url);
+const WIZARD = "src/components/RequestRepairWizard.tsx";
+const PAGE = "src/app/customer/appliances/page.tsx";
+const DATE_SELECT = "src/components/DateSelect.tsx";
+const wizard = readFileSync(new URL(WIZARD, ROOT), "utf8");
+const page = readFileSync(new URL(PAGE, ROOT), "utf8");
+const dateSelect = readFileSync(new URL(DATE_SELECT, ROOT), "utf8");
+
+// -------------------------------------------------- 1. the caps
+
+test("both identifiers are capped, and the caps are sane", () => {
+  // Long enough for the longest real values (model numbers run 15-25 characters,
+  // serials less), short enough that a pasted document cannot be stored.
+  assert.equal(MAX_MODEL_NUMBER_LENGTH, 40);
+  assert.equal(MAX_SERIAL_NUMBER_LENGTH, 40);
+  assert.ok(MAX_MODEL_NUMBER_LENGTH > 25 && MAX_MODEL_NUMBER_LENGTH <= 64);
+});
+
+test("cleanCode trims, collapses whitespace, and caps", () => {
+  assert.equal(cleanCode("  RT32K5530S8  ", 40), "RT32K5530S8");
+  // A paste from a PDF arrives with newlines and tabs in it.
+  assert.equal(cleanCode("RT32\nK5530\tS8", 40), "RT32 K5530 S8");
+  assert.equal(cleanCode("x".repeat(120), 40).length, 40);
+  assert.equal(cleanCode("   \n\t ", 40), "", "whitespace only is not a value");
+  assert.equal(cleanCode("", 40), "");
+  assert.equal(cleanCode("A1 B2", 3), "A1", "the cap applies after normalising");
+});
+
+test("the counter appears only when the field is nearly full", () => {
+  const short = "A".repeat(MAX_MODEL_NUMBER_LENGTH - COUNTER_VISIBLE_WITHIN - 1);
+  const edge = "A".repeat(MAX_MODEL_NUMBER_LENGTH - COUNTER_VISIBLE_WITHIN);
+  const full = "A".repeat(MAX_MODEL_NUMBER_LENGTH);
+
+  assert.equal(showsCounter(short, MAX_MODEL_NUMBER_LENGTH), false);
+  assert.equal(showsCounter(edge, MAX_MODEL_NUMBER_LENGTH), true);
+  assert.equal(showsCounter(full, MAX_MODEL_NUMBER_LENGTH), true);
+  assert.equal(showsCounter("", MAX_MODEL_NUMBER_LENGTH), false);
+});
+
+// -------------------------------------------------- 2. the date arithmetic
+
+test("daysInMonth knows the short months and the leap years", () => {
+  assert.equal(daysInMonth(2024, 2), 29, "2024 is a leap year");
+  assert.equal(daysInMonth(2023, 2), 28);
+  assert.equal(daysInMonth(2000, 2), 29, "divisible by 400");
+  assert.equal(daysInMonth(1900, 2), 28, "divisible by 100 but not 400");
+  assert.equal(daysInMonth(2024, 4), 30);
+  assert.equal(daysInMonth(2024, 12), 31);
+  assert.equal(daysInMonth(2024, 1), 31);
+});
+
+test("toIsoDate pads, so the value always fits the column", () => {
+  assert.equal(toIsoDate(2019, 3, 2), "2019-03-02");
+  assert.equal(toIsoDate(2024, 12, 31), "2024-12-31");
+  assert.equal(toIsoDate(1970, 1, 1), "1970-01-01");
+});
+
+test("parseIsoDate reads a calendar date locally, never as UTC", () => {
+  // `new Date("2019-03-12")` is UTC midnight: west of UTC that renders as 11 March.
+  // The components must survive the round trip in any timezone.
+  const date = parseIsoDate("2019-03-12");
+  assert.ok(date, "a plain ISO date parses");
+  assert.equal(date.getFullYear(), 2019);
+  assert.equal(date.getMonth(), 2, "March is 0-based");
+  assert.equal(date.getDate(), 12, "and never the 11th");
+
+  assert.equal(toIsoDate(2019, 3, 12), "2019-03-12", "round trip");
+});
+
+test("parseIsoDate refuses anything that is not a real calendar date", () => {
+  assert.equal(parseIsoDate("2023-02-30"), null, "30 February must not roll into March");
+  assert.equal(parseIsoDate("2023-13-01"), null);
+  assert.equal(parseIsoDate("2019-3-12"), null, "unpadded is not the stored shape");
+  assert.equal(parseIsoDate("12/03/2019"), null);
+  assert.equal(parseIsoDate("2019-03-12T00:00:00Z"), null);
+  assert.equal(parseIsoDate(""), null);
+  assert.equal(parseIsoDate(null), null);
+  assert.equal(parseIsoDate(undefined), null);
+});
+
+test("formatIsoDate shows the date the customer picked", () => {
+  const shown = formatIsoDate("2019-03-12");
+  assert.match(shown, /12/);
+  assert.match(shown, /Mar/);
+  assert.match(shown, /2019/);
+  assert.equal(formatIsoDate(""), "");
+  assert.equal(formatIsoDate(null), "");
+  assert.equal(formatIsoDate("rubbish"), "");
+});
+
+test("a purchase date can never be in the future", () => {
+  const today = new Date(2024, 1, 20); // 20 February 2024
+
+  assert.equal(lastSelectableDay(2024, 2, today), 20, "the current month stops at today");
+  assert.equal(lastSelectableDay(2024, 1, today), 31, "an earlier month is whole");
+  assert.equal(lastSelectableDay(2023, 2, today), 28, "a past February is not clamped");
+  assert.equal(
+    lastSelectableDay(2024, 3, today),
+    0,
+    "a month that has not started offers no days at all"
+  );
+  assert.equal(lastSelectableDay(2025, 1, today), 0, "nor does a year that has not started");
+  assert.equal(isFutureMonth(2024, 3, today), true);
+  assert.equal(isFutureMonth(2024, 2, today), false);
+});
+
+test("the year list runs back to the floor and hides the future", () => {
+  const today = new Date(2024, 1, 20);
+  const years = purchaseYears(today);
+
+  assert.equal(years[0], 2024, "newest first");
+  assert.equal(years[years.length - 1], MIN_PURCHASE_YEAR);
+  assert.equal(years.includes(2025), false, "an appliance cannot be bought next year");
+  assert.deepEqual([...years].sort((a, b) => b - a), years, "strictly descending");
+
+  // A stored value outside the range still has to be visible, or editing that row
+  // would silently rewrite its date.
+  assert.equal(purchaseYears(today, 2030)[0], 2030);
+});
+
+// -------------------------------------------------- 3. the caps are wired in
+
+test("both screens cap the identifiers in the field", () => {
+  for (const [name, source] of [
+    [WIZARD, wizard],
+    [PAGE, page],
+  ]) {
+    assert.match(
+      source,
+      /maxLength=\{MAX_MODEL_NUMBER_LENGTH\}/,
+      `${name} must cap the model number`
+    );
+    assert.match(
+      source,
+      /maxLength=\{MAX_SERIAL_NUMBER_LENGTH\}/,
+      `${name} must cap the serial number`
+    );
+    assert.match(
+      source,
+      /<FieldCounter value=\{.*\} max=\{MAX_\w+_LENGTH\} \/>/,
+      `${name} must explain the cap rather than stop typing silently`
+    );
+  }
+});
+
+test("both screens clean the identifiers on the way into the payload", () => {
+  assert.match(wizard, /model_number: cleanCode\(modelNumber, MAX_MODEL_NUMBER_LENGTH\) \|\| null/);
+  assert.match(wizard, /serial_number: cleanCode\(serialNumber, MAX_SERIAL_NUMBER_LENGTH\) \|\| null/);
+  assert.match(page, /model_number: cleanCode\(form\.model_number, MAX_MODEL_NUMBER_LENGTH\) \|\| null/);
+  assert.match(page, /serial_number: cleanCode\(form\.serial_number, MAX_SERIAL_NUMBER_LENGTH\) \|\| null/);
+});
+
+test("the purchase date is picked, not typed", () => {
+  for (const [name, source] of [
+    [WIZARD, wizard],
+    [PAGE, page],
+  ]) {
+    assert.match(
+      source,
+      /<DateSelect[\s\S]{0,140}id="appliance-purchase-date"/,
+      `${name} must use the shared picker for the purchase date`
+    );
+    assert.equal(
+      [...source.matchAll(/id="appliance-purchase-date"/g)].length,
+      1,
+      `${name} must not also keep a native input with the same id`
+    );
+    assert.doesNotMatch(
+      source,
+      /label htmlFor="appliance-purchase-date"/,
+      `${name} must let the picker own its own label, or the field is labelled twice`
+    );
+  }
+
+  // The wizard's OTHER date input is the preferred service date, and it stays
+  // native on purpose: that one is in the future, which DateSelect cannot express.
+  assert.match(wizard, /id="preferred-date"[\s\S]{0,200}type="date"/);
+
+  // Three selects, in the order a date is spoken: month, day, year.
+  assert.match(dateSelect, /id=\{`\$\{id\}-month`\}/);
+  assert.match(dateSelect, /id=\{`\$\{id\}-day`\}/);
+  assert.match(dateSelect, /id=\{`\$\{id\}-year`\}/);
+  assert.match(dateSelect, /aria-label=\{`\$\{label\} month`\}/);
+  assert.match(
+    dateSelect,
+    /onChange=\{\(e\) => chooseMonth\(Number\(e\.target\.value\)\)\}/,
+    "changing the month re-clamps the day"
+  );
+  assert.match(
+    dateSelect,
+    /disabled=\{dayLimit === 0\}/,
+    "a month that has not happened disables the day list"
+  );
+});
+

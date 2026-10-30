@@ -4,6 +4,14 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/useUser";
 import StatusBadge from "@/components/StatusBadge";
+import DateSelect from "@/components/DateSelect";
+import FieldCounter from "@/components/FieldCounter";
+import {
+  MAX_MODEL_NUMBER_LENGTH,
+  MAX_SERIAL_NUMBER_LENGTH,
+  cleanCode,
+  formatIsoDate,
+} from "@/lib/appliance-fields";
 import { Plus, Pencil, Trash2, Refrigerator, X } from "lucide-react";
 
 type Appliance = {
@@ -149,8 +157,10 @@ export default function AppliancesPage() {
     const payload = {
       ...form,
       brand: form.brand || null,
-      model_number: form.model_number || null,
-      serial_number: form.serial_number || null,
+      // Capped on the way in as well as in the field, so a row stored before the
+      // cap existed is repaired the first time it is edited.
+      model_number: cleanCode(form.model_number, MAX_MODEL_NUMBER_LENGTH) || null,
+      serial_number: cleanCode(form.serial_number, MAX_SERIAL_NUMBER_LENGTH) || null,
       purchase_date: form.purchase_date || null,
       warranty_type: form.warranty_type || null,
       warranty_expiry_date: form.warranty_expiry_date || null,
@@ -224,26 +234,29 @@ export default function AppliancesPage() {
                 <input
                   value={form.model_number}
                   onChange={(e) => setForm({ ...form, model_number: e.target.value })}
+                  maxLength={MAX_MODEL_NUMBER_LENGTH}
                   className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                   placeholder="Model number"
                 />
+                <FieldCounter value={form.model_number} max={MAX_MODEL_NUMBER_LENGTH} />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-ink/80">Serial Number</label>
                 <input
                   value={form.serial_number}
                   onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
+                  maxLength={MAX_SERIAL_NUMBER_LENGTH}
                   className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                   placeholder="Serial number"
                 />
+                <FieldCounter value={form.serial_number} max={MAX_SERIAL_NUMBER_LENGTH} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-ink/80">Purchase Date</label>
-                <input
-                  type="date"
+                <DateSelect
+                  id="appliance-purchase-date"
+                  label="Purchase Date"
                   value={form.purchase_date}
-                  onChange={(e) => setForm({ ...form, purchase_date: e.target.value })}
-                  className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
+                  onChange={(purchase_date) => setForm({ ...form, purchase_date })}
                 />
               </div>
               <div>
@@ -355,7 +368,7 @@ export default function AppliancesPage() {
                 {appliance.brand && <p><span className="font-medium">Brand:</span> {appliance.brand}</p>}
                 {appliance.model_number && <p><span className="font-medium">Model:</span> {appliance.model_number}</p>}
                 {appliance.serial_number && <p><span className="font-medium">Serial:</span> {appliance.serial_number}</p>}
-                {appliance.purchase_date && <p><span className="font-medium">Purchased:</span> {new Date(appliance.purchase_date).toLocaleDateString()}</p>}
+                {appliance.purchase_date && <p><span className="font-medium">Purchased:</span> {formatIsoDate(appliance.purchase_date)}</p>}
                 {appliance.warranty_type && <p><span className="font-medium">Warranty:</span> {appliance.warranty_type}</p>}
                 {appliance.warranty_expiry_date && <p><span className="font-medium">Expires:</span> {new Date(appliance.warranty_expiry_date).toLocaleDateString()}</p>}
               </div>
