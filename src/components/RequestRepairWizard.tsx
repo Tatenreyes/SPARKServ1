@@ -220,6 +220,31 @@ export default function RequestRepairWizard() {
           ? "Skipped"
           : "";
 
+  /**
+   * Did troubleshooting solve it? Then there is nothing to dispatch, and the booking
+   * half of this form is not rendered at all (sections 3-5 below): a fault that is gone
+   * needs no photos, no service address and no appointment — and creating the request
+   * anyway would put a technician in the queue for work that no longer exists,
+   * consuming a turn in the fairness rotation for a visit nobody needs.
+   *
+   * Hidden means NOT RENDERED, never merely collapsed: a collapsed section can still
+   * hold a `required` control, and a browser cannot focus or scroll to one it cannot
+   * see (see ALL_SECTIONS_OPEN).
+   *
+   * `unresolved` and `skipped` both continue to the full form — trying the checks and
+   * still having a fault is the ordinary outcome, not a failure.
+   */
+  const needsVisit = troubleshootingOutcome !== "resolved";
+
+  /**
+   * Captured BEFORE the early return below narrows the union: after
+   * `if (!needsVisit) return`, TypeScript (correctly) knows the outcome cannot be
+   * "resolved" any more, so this comparison would be flagged as impossible further
+   * down. Keeping it derived rather than hardcoding `false` in the payload means the
+   * value stays right if the early return is ever changed.
+   */
+  const troubleshootingResolved = troubleshootingOutcome === "resolved";
+
   /** Empty string (not "No preference") when unscheduled — the rail renders its
    *  own placeholder for an untouched field. */
   const scheduleText = preferredDate
@@ -418,6 +443,21 @@ export default function RequestRepairWizard() {
     setError(null);
 
     /**
+     * Defence in depth for the resolved case. When troubleshooting fixed the fault the
+     * booking half of this form is not rendered, so its fields are empty by definition —
+     * and the appliance insert runs before the request POST, which would leave a stray
+     * appliance row behind. The submit button is not reachable in that state; this makes
+     * the guarantee hold for a programmatic submit as well.
+     */
+    if (!needsVisit) {
+      setError(
+        "Nothing was booked — you told us the checks fixed the problem. If the fault is back, say so and we will continue."
+      );
+      setSubmitting(false);
+      return;
+    }
+
+    /**
      * The warranty acknowledgment is a hard gate, and it is enforced here as well
      * as on the disabled button so a keyboard or programmatic submit cannot walk
      * past it. Wording matters: the customer is acknowledging that they were told
@@ -549,7 +589,7 @@ export default function RequestRepairWizard() {
           troubleshooting_outcome: troubleshootingOutcome,
           // The legacy boolean mirrors the outcome so existing readers keep
           // working; `troubleshooting_outcome` is the detailed source of truth.
-          chatbot_resolved: troubleshootingOutcome === "resolved",
+          chatbot_resolved: troubleshootingResolved,
           problem_description: problemDescription,
           photos: photoUrls,
           service_type: serviceType,
@@ -635,6 +675,52 @@ export default function RequestRepairWizard() {
               setAssignedTechnician(null);
             }}
           />
+        </div>
+      </div>
+    );
+  }
+
+  /**
+   * Troubleshooting solved it: no request was sent, nothing was booked, and no appliance
+   * row was created. The customer's answers are still in state, so "it came back"
+   * restores the whole form exactly as they left it — which matters, because an
+   * intermittent fault (a fridge that defrosted overnight) is a common reason to answer
+   * "that fixed it". The wording therefore never claims the appliance was repaired.
+   */
+  if (!needsVisit) {
+    return (
+      <div className="max-w-2xl">
+        <div className="rounded-2xl border border-line bg-signal-soft p-8 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-signal-soft text-signal-ink">
+            <CheckCircle2 className="h-7 w-7" />
+          </div>
+          <h2 className="mt-4 font-display text-xl font-semibold text-ink">
+            Nothing to book — the checks did the trick
+          </h2>
+          <p className="mt-2 text-sm text-muted">
+            You told us the preliminary checks fixed it, so no repair request was sent and
+            no technician has been booked. Nothing you entered has been lost.
+          </p>
+          <p className="mx-auto mt-3 max-w-lg text-xs leading-relaxed text-muted">
+            If the fault comes back — or it only seems better for now — say so and we will
+            pick up exactly where you left off.
+          </p>
+          <div className="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setTroubleshootingOutcome("unresolved")}
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-brand-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
+            >
+              It came back — request a visit
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/customer/dashboard")}
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-line bg-surface px-6 text-sm font-semibold text-ink/75 transition hover:bg-soft"
+            >
+              Back to my dashboard
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -984,6 +1070,7 @@ export default function RequestRepairWizard() {
       </CollapsibleSection>
 
       {/* 3 ── Photos */}
+      {needsVisit && (
       <CollapsibleSection
         id="section-photos"
         step={3}
@@ -1086,8 +1173,10 @@ export default function RequestRepairWizard() {
           </>
         )}
       </CollapsibleSection>
+      )}
 
       {/* 4 ── Service details */}
+      {needsVisit && (
       <CollapsibleSection
         id="section-service"
         step={4}
@@ -1227,10 +1316,12 @@ export default function RequestRepairWizard() {
           />
         </div>
       </CollapsibleSection>
+      )}
 
       {/* 5 ── Summary. Below `xl` only: from `xl` up the sticky rail on the
           right carries the same values, so rendering both would duplicate the
           summary on one screen. */}
+      {needsVisit && (
       <CollapsibleSection
         id="section-summary"
         step={5}
@@ -1293,6 +1384,7 @@ export default function RequestRepairWizard() {
           and no visit is booked until you review and approve a cost estimate.
         </p>
       </CollapsibleSection>
+      )}
 
           {/* The single desktop submission control — inline at the end of the
               main form column, sharing state with the phone bar below (each is
