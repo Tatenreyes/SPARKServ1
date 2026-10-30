@@ -23,6 +23,7 @@ import AssignmentStatusCard from "@/components/AssignmentStatusCard";
 import DateSelect from "@/components/DateSelect";
 import FieldCounter from "@/components/FieldCounter";
 import ServiceLocationPicker from "@/components/ServiceLocationPicker";
+import TimeSelect from "@/components/TimeSelect";
 import TroubleshootingPanel from "@/components/TroubleshootingPanel";
 import {
   getApplianceIssues,
@@ -34,6 +35,7 @@ import {
   cleanCode,
   sanitiseCodeInput,
 } from "@/lib/appliance-fields";
+import { isAfter } from "@/lib/time-of-day";
 import { matchIssue, type TroubleshootingOutcome } from "@/lib/issue-matching";
 import { getTroubleshootingGuide } from "@/lib/troubleshooting";
 import CollapsibleSection from "@/components/mobile/CollapsibleSection";
@@ -1296,28 +1298,34 @@ export default function RequestRepairWizard() {
             />
           </div>
 
-          <div>
-            <label htmlFor="preferred-start" className="mb-1.5 block text-sm font-medium text-ink/80">
+          {/* Full width: two three-control pickers side by side need the room, and the
+              half-width cell they used to share would wrap them into a column each. */}
+          <div className="sm:col-span-2">
+            <p className="mb-1.5 block text-sm font-medium text-ink/80">
               Preferred time window{" "}
               <span className="font-normal text-muted">(optional)</span>
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <input
+            </p>
+            {/* A range, so two pickers — and the end only offers times that can follow the
+                start: `readRequestedWindow()` drops a window whose end is not strictly
+                later, silently, so an invalid pair would vanish without a word. */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TimeSelect
                 id="preferred-start"
-                type="time"
-                aria-label="Preferred start time"
+                label="Preferred start time"
                 value={preferredStart}
-                onChange={(e) => setPreferredStart(e.target.value)}
+                onChange={(value) => {
+                  setPreferredStart(value);
+                  if (preferredEnd && !isAfter(value, preferredEnd)) setPreferredEnd("");
+                }}
                 disabled={!preferredDate}
-                className={`${FIELD} disabled:opacity-50`}
               />
-              <input
-                type="time"
-                aria-label="Preferred end time"
+              <TimeSelect
+                id="preferred-end"
+                label="Preferred end time"
                 value={preferredEnd}
-                onChange={(e) => setPreferredEnd(e.target.value)}
+                onChange={setPreferredEnd}
+                after={preferredStart}
                 disabled={!preferredDate}
-                className={`${FIELD} disabled:opacity-50`}
               />
             </div>
           </div>

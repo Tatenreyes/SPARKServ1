@@ -1,15 +1,16 @@
 /**
- * Unit tests for the appliance fields: model number, serial number, purchase date.
+ * Unit tests for the request form's field layer: the appliance identifiers, the dates
+ * (purchase, requested service, warranty) and the preferred time window.
  *
  *   npm run test:appliance-fields
  *
- * These run the REAL module (`src/lib/appliance-fields.ts`) — Node 24 strips the
- * TypeScript types, so there is no build step and no duplicated copy of the rules
- * to drift. The two screens are also read as text, because the caps have to be
- * WIRED INTO the fields, not merely defined.
+ * These run the REAL modules (`src/lib/appliance-fields.ts`, `src/lib/time-of-day.ts`) —
+ * Node 24 strips the TypeScript types, so there is no build step and no duplicated copy of
+ * the rules to drift. The screens and both pickers are also read as text, because the
+ * limits have to be WIRED INTO the fields, not merely defined.
  *
- * What is NOT covered here: the rendered selects themselves (see TESTING.md for
- * the manual pass) and anything that needs the live database.
+ * What is NOT covered here: the rendered controls themselves (see TESTING.md for the
+ * manual pass) and anything that needs the live database.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -36,14 +37,27 @@ import {
   toIsoDate,
   yearsInRange,
 } from "../../src/lib/appliance-fields.ts";
+import {
+  formatClockTime,
+  hour12Of,
+  hour24Of,
+  isAfter,
+  meridiemOf,
+  minutesOfDay,
+  optionsFor,
+  timeOptions,
+  toClockTime,
+} from "../../src/lib/time-of-day.ts";
 
 const ROOT = new URL("../../", import.meta.url);
 const WIZARD = "src/components/RequestRepairWizard.tsx";
 const PAGE = "src/app/customer/appliances/page.tsx";
 const DATE_SELECT = "src/components/DateSelect.tsx";
+const TIME_SELECT = "src/components/TimeSelect.tsx";
 const wizard = readFileSync(new URL(WIZARD, ROOT), "utf8");
 const page = readFileSync(new URL(PAGE, ROOT), "utf8");
 const dateSelect = readFileSync(new URL(DATE_SELECT, ROOT), "utf8");
+const timeSelect = readFileSync(new URL(TIME_SELECT, ROOT), "utf8");
 
 // -------------------------------------------------- 1. the caps
 
@@ -269,6 +283,98 @@ test("both screens clean the identifiers on the way into the payload", () => {
   assert.match(page, /serial_number: cleanCode\(form\.serial_number, MAX_SERIAL_NUMBER_LENGTH\) \|\| null/);
 });
 
+// -------------------------------------------------- 4. the preferred time window
+
+test("a clock time survives the round trip", () => {
+  assert.equal(toClockTime(9, 5), "09:05");
+  assert.equal(toClockTime(0, 0), "00:00");
+  assert.equal(toClockTime(23, 55), "23:55");
+  assert.equal(minutesOfDay("09:05"), 545);
+  assert.equal(minutesOfDay("9:05"), 545, "a one-digit hour is accepted, as the API accepts it");
+  assert.equal(minutesOfDay("24:00"), null);
+  assert.equal(minutesOfDay("09:60"), null);
+  assert.equal(minutesOfDay(""), null);
+  assert.equal(minutesOfDay(null), null);
+});
+
+test("the 12-hour picker and the 24-hour payload agree", () => {
+  assert.equal(hour12Of(0), 12, "midnight is 12 AM");
+  assert.equal(hour12Of(12), 12, "noon is 12 PM");
+  assert.equal(hour12Of(13), 1);
+  assert.equal(meridiemOf(0), "AM");
+  assert.equal(meridiemOf(11), "AM");
+  assert.equal(meridiemOf(12), "PM");
+  assert.equal(meridiemOf(23), "PM");
+  assert.equal(hour24Of(12, "AM"), 0);
+  assert.equal(hour24Of(12, "PM"), 12);
+  assert.equal(hour24Of(1, "PM"), 13);
+
+  // Every step of the day, through the picker and back: the value the customer sees and
+  // the value the API receives must be the same time.
+  for (let hour = 0; hour < 24; hour++) {
+    for (const minute of [0, 5, 30, 55]) {
+      const chosen = toClockTime(hour, minute);
+      const rebuilt = toClockTime(hour24Of(hour12Of(hour), meridiemOf(hour)), minute);
+      assert.equal(rebuilt, chosen);
+    }
+  }
+
+  assert.equal(formatClockTime("09:00"), "9:00 AM");
+  assert.equal(formatClockTime("13:30"), "1:30 PM");
+  assert.equal(formatClockTime("00:00"), "12:00 AM");
+  assert.equal(formatClockTime(""), "");
+});
+
+test("the window is a five-minute grid", () => {
+  const all = timeOptions();
+  assert.equal(all.length, 288, "24 hours at five-minute steps");
+  assert.deepEqual(all[0], { hour: 0, minute: 0 });
+  assert.deepEqual(all[1], { hour: 0, minute: 5 });
+  assert.deepEqual(all[all.length - 1], { hour: 23, minute: 55 });
+});
+
+test("an end time can only be a time that follows the start", () => {
+  // readRequestedWindow() drops a window whose end is not strictly later — the request
+  // still submits, the stated preference just disappears. So the picker must never offer
+  // such a pair in the first place.
+  const after = timeOptions("09:00");
+  assert.deepEqual(after[0], { hour: 9, minute: 5 }, "09:00 itself is not a legal end");
+  assert.equal(after.some((option) => option.hour === 8), false, "nor is anything earlier");
+
+  assert.equal(isAfter("09:00", "11:00"), true);
+  assert.equal(isAfter("09:00", "09:05"), true);
+  assert.equal(isAfter("09:00", "09:00"), false, "equal is not a window");
+  assert.equal(isAfter("09:00", "08:55"), false);
+  assert.equal(isAfter("", "11:00"), false, "no start, no window");
+  assert.equal(isAfter("09:00", ""), false);
+  assert.equal(timeOptions("23:55").length, 0, "nothing is left after the last step");
+});
+
+test("a partial pick only offers times that exist", () => {
+  const valid = timeOptions("09:00");
+  assert.equal(optionsFor(valid, { hour12: 9, meridiem: "AM" })[0].minute, 5, "the 9 AM block starts at :05");
+  assert.equal(optionsFor(valid, { hour12: 10, meridiem: "AM" })[0].minute, 0, "10 AM is whole");
+  assert.equal(optionsFor(valid, { hour12: 10, meridiem: "AM" }).length, 12);
+  assert.equal(optionsFor(valid, { hour12: 8, meridiem: "AM" }).length, 0, "8 AM is gone entirely");
+});
+
+test("the window is picked from selects, not native time inputs", () => {
+  assert.match(wizard, /<TimeSelect[\s\S]{0,160}id="preferred-start"/);
+  assert.match(wizard, /<TimeSelect[\s\S]{0,160}id="preferred-end"/);
+  assert.match(wizard, /after=\{preferredStart\}/, "the end is constrained by the start");
+  assert.match(
+    wizard,
+    /if \(preferredEnd && !isAfter\(value, preferredEnd\)\) setPreferredEnd\(""\)/,
+    "moving the start past the end clears the end, rather than leaving a window the API drops"
+  );
+  assert.match(wizard, /disabled=\{!preferredDate\}/, "no window before a date is chosen");
+  assert.doesNotMatch(wizard, /type="time"/, "no native time input is left");
+  assert.match(
+    timeSelect,
+    /disabled=\{disabled \|\| minuteChoices\.length === 0\}/,
+    "the minute list is disabled when nothing is left in the day"
+  );
+});
 test("every date field is picked, not typed", () => {
   for (const [name, source] of [
     [WIZARD, wizard],
