@@ -27,6 +27,7 @@ import {
   lastSelectableDay,
   parseIsoDate,
   purchaseYears,
+  sanitiseCodeInput,
   showsCounter,
   toIsoDate,
 } from "../../src/lib/appliance-fields.ts";
@@ -44,8 +45,8 @@ const dateSelect = readFileSync(new URL(DATE_SELECT, ROOT), "utf8");
 test("both identifiers are capped, and the caps are sane", () => {
   // Long enough for the longest real values (model numbers run 15-25 characters,
   // serials less), short enough that a pasted document cannot be stored.
-  assert.equal(MAX_MODEL_NUMBER_LENGTH, 40);
-  assert.equal(MAX_SERIAL_NUMBER_LENGTH, 40);
+  assert.equal(MAX_MODEL_NUMBER_LENGTH, 50);
+  assert.equal(MAX_SERIAL_NUMBER_LENGTH, 50);
   assert.ok(MAX_MODEL_NUMBER_LENGTH > 25 && MAX_MODEL_NUMBER_LENGTH <= 64);
 });
 
@@ -57,6 +58,27 @@ test("cleanCode trims, collapses whitespace, and caps", () => {
   assert.equal(cleanCode("   \n\t ", 40), "", "whitespace only is not a value");
   assert.equal(cleanCode("", 40), "");
   assert.equal(cleanCode("A1 B2", 3), "A1", "the cap applies after normalising");
+});
+
+test("an identifier may only hold letters, digits and a label separator", () => {
+  // Real labels: "WF45R6100AP/A2" and "RT-32K". A strictly alphanumeric filter
+  // would reject both, so the slash and hyphen survive.
+  assert.equal(sanitiseCodeInput("WF45R6100AP/A2", 50), "WF45R6100AP/A2");
+  assert.equal(sanitiseCodeInput("RT-32K", 50), "RT-32K");
+  assert.equal(sanitiseCodeInput("A1;B2#C3", 50), "A1B2C3", "punctuation is dropped as it is typed");
+  assert.equal(sanitiseCodeInput("RT32 K5530S8", 50), "RT32 K5530S8", "the space is part of the label");
+  assert.equal(sanitiseCodeInput("sn. 123/2024, unit", 50), "sn 123/2024 unit");
+  assert.equal(sanitiseCodeInput("x".repeat(80), 50).length, 50, "and it still caps");
+});
+
+test("the field and the payload agree on what an identifier is", () => {
+  // If they disagreed, what the customer sees is not what gets stored.
+  for (const value of ["WF45R6100AP/A2", "RT-32K", "RT32 K5530S8"]) {
+    assert.equal(sanitiseCodeInput(value, 50), value);
+    assert.equal(cleanCode(value, 50), value);
+  }
+  assert.equal(cleanCode("  A1;B2  ", 50), "A1B2");
+  assert.equal(cleanCode("RT32  K5530", 50), "RT32 K5530", "runs of spaces collapse");
 });
 
 test("the counter appears only when the field is nearly full", () => {
@@ -172,6 +194,11 @@ test("both screens cap the identifiers in the field", () => {
       source,
       /<FieldCounter value=\{.*\} max=\{MAX_\w+_LENGTH\} \/>/,
       `${name} must explain the cap rather than stop typing silently`
+    );
+    assert.match(
+      source,
+      /sanitiseCodeInput\(e\.target\.value, MAX_(MODEL|SERIAL)_NUMBER_LENGTH\)/,
+      `${name} must drop characters that cannot appear on a rating label`
     );
   }
 });

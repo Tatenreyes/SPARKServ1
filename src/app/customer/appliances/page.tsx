@@ -11,6 +11,7 @@ import {
   MAX_SERIAL_NUMBER_LENGTH,
   cleanCode,
   formatIsoDate,
+  sanitiseCodeInput,
 } from "@/lib/appliance-fields";
 import { Plus, Pencil, Trash2, Refrigerator, X } from "lucide-react";
 
@@ -233,7 +234,7 @@ export default function AppliancesPage() {
                 <label className="mb-1 block text-sm font-medium text-ink/80">Model Number</label>
                 <input
                   value={form.model_number}
-                  onChange={(e) => setForm({ ...form, model_number: e.target.value })}
+                  onChange={(e) => setForm({ ...form, model_number: sanitiseCodeInput(e.target.value, MAX_MODEL_NUMBER_LENGTH) })}
                   maxLength={MAX_MODEL_NUMBER_LENGTH}
                   className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                   placeholder="Model number"
@@ -244,7 +245,7 @@ export default function AppliancesPage() {
                 <label className="mb-1 block text-sm font-medium text-ink/80">Serial Number</label>
                 <input
                   value={form.serial_number}
-                  onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
+                  onChange={(e) => setForm({ ...form, serial_number: sanitiseCodeInput(e.target.value, MAX_SERIAL_NUMBER_LENGTH) })}
                   maxLength={MAX_SERIAL_NUMBER_LENGTH}
                   className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
                   placeholder="Serial number"

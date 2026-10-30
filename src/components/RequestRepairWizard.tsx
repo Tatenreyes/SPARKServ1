@@ -32,6 +32,7 @@ import {
   MAX_MODEL_NUMBER_LENGTH,
   MAX_SERIAL_NUMBER_LENGTH,
   cleanCode,
+  sanitiseCodeInput,
 } from "@/lib/appliance-fields";
 import { matchIssue, type TroubleshootingOutcome } from "@/lib/issue-matching";
 import { getTroubleshootingGuide } from "@/lib/troubleshooting";
@@ -866,7 +867,7 @@ export default function RequestRepairWizard() {
               <input
                 id="appliance-model"
                 value={modelNumber}
-                onChange={(e) => setModelNumber(e.target.value)}
+                onChange={(e) => setModelNumber(sanitiseCodeInput(e.target.value, MAX_MODEL_NUMBER_LENGTH))}
                 maxLength={MAX_MODEL_NUMBER_LENGTH}
                 autoComplete="off"
                 className={FIELD}
@@ -881,7 +882,7 @@ export default function RequestRepairWizard() {
               <input
                 id="appliance-serial"
                 value={serialNumber}
-                onChange={(e) => setSerialNumber(e.target.value)}
+                onChange={(e) => setSerialNumber(sanitiseCodeInput(e.target.value, MAX_SERIAL_NUMBER_LENGTH))}
                 maxLength={MAX_SERIAL_NUMBER_LENGTH}
                 autoComplete="off"
                 className={FIELD}

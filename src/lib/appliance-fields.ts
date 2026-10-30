@@ -20,10 +20,34 @@
  */
 
 /** Longest accepted model number. Real ones run 15-25 characters ("WF45R6100AP/A2"). */
-export const MAX_MODEL_NUMBER_LENGTH = 40;
+export const MAX_MODEL_NUMBER_LENGTH = 50;
 
 /** Longest accepted serial number. Rating labels rarely exceed 25 characters. */
-export const MAX_SERIAL_NUMBER_LENGTH = 40;
+export const MAX_SERIAL_NUMBER_LENGTH = 50;
+
+/**
+ * Everything an identifier may contain: letters, digits, and the three characters
+ * that actually appear on a rating label - whitespace, hyphen and slash
+ * ("WF45R6100AP/A2", "RT-32K"). Anything else is dropped as it is typed, so a pasted
+ * sentence cannot become an appliance identifier.
+ *
+ * The slash and hyphen are deliberate: they are not "letters or numbers", but a
+ * strictly alphanumeric filter would reject real Samsung and LG labels.
+ */
+const NON_CODE_CHARACTERS = /[^A-Za-z0-9\s/-]/g;
+
+/** Strip the characters that cannot be part of an identifier. */
+function stripCodeCharacters(value: string): string {
+  return value.replace(NON_CODE_CHARACTERS, "");
+}
+
+/**
+ * Strip and cap on every keystroke, so what is on screen is already what will be
+ * stored: a comma or a full stop from a pasted sentence never even appears.
+ */
+export function sanitiseCodeInput(value: string, max: number): string {
+  return stripCodeCharacters(value).slice(0, max);
+}
 
 /** Earliest selectable purchase year. */
 export const MIN_PURCHASE_YEAR = 1970;
@@ -32,7 +56,8 @@ export const MIN_PURCHASE_YEAR = 1970;
 export const COUNTER_VISIBLE_WITHIN = 10;
 
 /**
- * Trim, collapse runs of whitespace, and cap to `max`.
+ * Strip anything that is not a letter, digit, space, hyphen or slash, collapse runs
+ * of whitespace, trim, and cap to `max`.
  *
  * Applied on the way into the payload as well as in the field, so a row that
  * already exceeds the cap is repaired the first time it is edited.
@@ -40,7 +65,8 @@ export const COUNTER_VISIBLE_WITHIN = 10;
 export function cleanCode(value: string, max: number): string {
   // Trimmed again after the slice: cutting mid-value can land on the space the
   // collapse just normalised, and "RT32 " is not a model number.
-  return value.replace(/\s+/g, " ").trim().slice(0, max).trim();
+  const collapsed = stripCodeCharacters(value).replace(/\s+/g, " ").trim();
+  return collapsed.slice(0, max).trim();
 }
 
 /** Whether the length counter should be shown for this value. */

@@ -820,7 +820,7 @@ See the RPC table in `QUEUE-SYSTEM.md`. The architectural point:
 
 ## Known state worth flagging
 
-- **`appliances.model_number` and `.serial_number` are unbounded `text`, and the 40-character
+- **`appliances.model_number` and `.serial_number` are unbounded `text`, and the 50-character
   cap is not in the database.** Both screens write those columns straight through the RLS
   client, so the limit lives in the field (`maxLength`), in the payload builder
   (`cleanCode()` in `src/lib/appliance-fields.ts`) and in the suite — but a direct PostgREST
