@@ -123,41 +123,102 @@ export function formatIsoDate(value: string | null | undefined): string {
 }
 
 /**
- * The last selectable day of a month, so a purchase date is never in the future:
- * the appliance cannot have been bought tomorrow.
+ * A date field's selectable range, inclusive at both ends.
  *
- * Returns 0 for a month that has not started yet — a year is capped at the current
- * one, but March is still selectable in February, and that month must offer no days
- * at all rather than a full set of dates that have not happened.
+ * ONE rule for both date fields: an appliance's purchase date is "1970 .. today" and a
+ * requested service date is "today .. a year ahead", so the same clamping that stops a
+ * purchase date in the future stops a service date in the past.
  */
-export function lastSelectableDay(year: number, month: number, maxDate: Date): number {
-  const maxYear = maxDate.getFullYear();
-  const maxMonth = maxDate.getMonth() + 1;
-
-  if (year > maxYear) return 0;
-  if (year === maxYear) {
-    if (month > maxMonth) return 0;
-    if (month === maxMonth) {
-      return Math.min(daysInMonth(year, month), maxDate.getDate());
-    }
-  }
-  return daysInMonth(year, month);
+export interface DateRange {
+  min: Date;
+  max: Date;
 }
 
-/** Whether a month can be picked at all: later months of the current year cannot. */
-export function isFutureMonth(year: number, month: number, maxDate: Date): boolean {
-  return lastSelectableDay(year, month, maxDate) === 0;
+/** A calendar day with no time, so comparing two bounds never depends on the clock. */
+export function atMidnight(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/** Today, at midnight. */
+export function startOfToday(now: Date = new Date()): Date {
+  return atMidnight(now);
+}
+
+/** An appliance's purchase date: 1970 up to today. Nothing is bought tomorrow. */
+export function pastRange(today: Date): DateRange {
+  return { min: new Date(MIN_PURCHASE_YEAR, 0, 1), max: atMidnight(today) };
+}
+
+/** A requested service date: today up to a year ahead. Nothing is booked in the past. */
+export function futureRange(today: Date): DateRange {
+  const from = atMidnight(today);
+  return {
+    min: from,
+    max: new Date(from.getFullYear() + 1, from.getMonth(), from.getDate()),
+  };
+}
+
+/** How far ahead a warranty expiry date may be set. */
+export const MAX_WARRANTY_YEARS = 10;
+
+/**
+ * A warranty expiry: 1970 up to ten years ahead.
+ *
+ * The one field that legitimately sits on both sides of today — a warranty may already
+ * have run out, which is exactly why the customer is being asked. The ceiling is only
+ * there to stop a typo like 2206.
+ */
+export function anyRange(today: Date): DateRange {
+  const from = atMidnight(today);
+  return {
+    min: new Date(MIN_PURCHASE_YEAR, 0, 1),
+    max: new Date(from.getFullYear() + MAX_WARRANTY_YEARS, from.getMonth(), from.getDate()),
+  };
+}
+
+/** Where a month sits relative to a range. */
+export type MonthPosition = "before" | "inside" | "after";
+
+export function monthPosition(year: number, month: number, range: DateRange): MonthPosition {
+  const first = new Date(year, month - 1, 1).getTime();
+  const last = new Date(year, month, 0).getTime();
+  if (last < atMidnight(range.min).getTime()) return "before";
+  if (first > atMidnight(range.max).getTime()) return "after";
+  return "inside";
 }
 
 /**
- * Selectable purchase years, newest first.
+ * The selectable day numbers inside one month, as `[first, last]`, or null when the
+ * whole month falls outside the range.
  *
- * `include` keeps a stored value visible even when it falls outside the range —
- * a clock that moved, or a row edited before this rule existed.
+ * Both ends are clamped, which is what keeps the current month from offering days that
+ * have not happened (a purchase) or days that are already gone (a service call).
  */
-export function purchaseYears(maxDate: Date, include?: number | null): number[] {
+export function selectableDayRange(
+  year: number,
+  month: number,
+  range: DateRange
+): [number, number] | null {
+  if (monthPosition(year, month, range) !== "inside") return null;
+
+  const monthDays = daysInMonth(year, month);
+  const min = atMidnight(range.min);
+  const max = atMidnight(range.max);
+  const from = new Date(year, month - 1, 1).getTime() < min.getTime() ? min.getDate() : 1;
+  const to = new Date(year, month, 0).getTime() > max.getTime() ? max.getDate() : monthDays;
+  return [from, to];
+}
+
+/**
+ * The years a range spans, newest first, plus a stored value that falls outside it — a
+ * clock that moved, or a row written before this rule existed. Dropping that year would
+ * silently rewrite the date the next time the row was edited.
+ */
+export function yearsInRange(range: DateRange, include?: number | null): number[] {
   const years: number[] = [];
-  for (let year = maxDate.getFullYear(); year >= MIN_PURCHASE_YEAR; year--) {
+  const last = atMidnight(range.max).getFullYear();
+  const first = atMidnight(range.min).getFullYear();
+  for (let year = last; year >= first; year--) {
     years.push(year);
   }
   if (include && !years.includes(include)) years.unshift(include);

@@ -896,6 +896,7 @@ export default function RequestRepairWizard() {
                 label="Purchase date"
                 value={purchaseDate}
                 onChange={setPurchaseDate}
+                direction="past"
               />
             </div>
 
@@ -949,18 +950,12 @@ export default function RequestRepairWizard() {
         {warrantyStatus === "yes" && (
           <div className="mt-4 space-y-4">
             <div>
-              <label
-                htmlFor="warranty-expiry"
-                className="mb-1.5 block text-sm font-medium text-ink/80"
-              >
-                Warranty expiration date
-              </label>
-              <input
+              <DateSelect
                 id="warranty-expiry"
-                type="date"
+                label="Warranty expiration date"
                 value={warrantyExpiryDate}
-                onChange={(e) => setWarrantyExpiryDate(e.target.value)}
-                className={FIELD}
+                onChange={setWarrantyExpiryDate}
+                direction="any"
               />
             </div>
 
@@ -1290,15 +1285,14 @@ export default function RequestRepairWizard() {
           />
 
           <div>
-            <label htmlFor="preferred-date" className="mb-1.5 block text-sm font-medium text-ink/80">
-              Preferred service date
-            </label>
-            <input
+            {/* Same control as the purchase date, on the other side of today: today up to
+                a year ahead. The time window below stays disabled until a date is chosen. */}
+            <DateSelect
               id="preferred-date"
-              type="date"
+              label="Preferred service date"
               value={preferredDate}
-              onChange={(e) => setPreferredDate(e.target.value)}
-              className={FIELD}
+              onChange={setPreferredDate}
+              direction="future"
             />
           </div>
 

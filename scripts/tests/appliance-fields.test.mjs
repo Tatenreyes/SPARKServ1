@@ -19,17 +19,22 @@ import {
   COUNTER_VISIBLE_WITHIN,
   MAX_MODEL_NUMBER_LENGTH,
   MAX_SERIAL_NUMBER_LENGTH,
+  MAX_WARRANTY_YEARS,
   MIN_PURCHASE_YEAR,
+  anyRange,
   cleanCode,
   daysInMonth,
   formatIsoDate,
-  isFutureMonth,
-  lastSelectableDay,
+  futureRange,
+  monthPosition,
   parseIsoDate,
-  purchaseYears,
+  pastRange,
   sanitiseCodeInput,
+  selectableDayRange,
   showsCounter,
+  startOfToday,
   toIsoDate,
+  yearsInRange,
 } from "../../src/lib/appliance-fields.ts";
 
 const ROOT = new URL("../../", import.meta.url);
@@ -144,33 +149,87 @@ test("formatIsoDate shows the date the customer picked", () => {
 });
 
 test("a purchase date can never be in the future", () => {
-  const today = new Date(2024, 1, 20); // 20 February 2024
+  const range = pastRange(new Date(2024, 1, 20)); // 20 February 2024
 
-  assert.equal(lastSelectableDay(2024, 2, today), 20, "the current month stops at today");
-  assert.equal(lastSelectableDay(2024, 1, today), 31, "an earlier month is whole");
-  assert.equal(lastSelectableDay(2023, 2, today), 28, "a past February is not clamped");
+  assert.deepEqual(selectableDayRange(2024, 2, range), [1, 20], "the current month stops at today");
+  assert.deepEqual(selectableDayRange(2024, 1, range), [1, 31], "an earlier month is whole");
+  assert.deepEqual(selectableDayRange(2023, 2, range), [1, 28], "a past February is not clamped");
   assert.equal(
-    lastSelectableDay(2024, 3, today),
-    0,
+    selectableDayRange(2024, 3, range),
+    null,
     "a month that has not started offers no days at all"
   );
-  assert.equal(lastSelectableDay(2025, 1, today), 0, "nor does a year that has not started");
-  assert.equal(isFutureMonth(2024, 3, today), true);
-  assert.equal(isFutureMonth(2024, 2, today), false);
+  assert.equal(selectableDayRange(2025, 1, range), null, "nor does a year that has not started");
+  assert.equal(selectableDayRange(1969, 6, range), null, "and the floor holds too");
+  assert.equal(selectableDayRange(1970, 1, range)[0], 1, "the first allowed day is 1 January 1970");
+
+  assert.equal(monthPosition(2024, 3, range), "after");
+  assert.equal(monthPosition(2024, 2, range), "inside");
+  assert.equal(monthPosition(2024, 1, range), "inside");
+  assert.equal(monthPosition(1969, 12, range), "before");
 });
 
-test("the year list runs back to the floor and hides the future", () => {
-  const today = new Date(2024, 1, 20);
-  const years = purchaseYears(today);
+test("a service date can never be in the past", () => {
+  // The same rule, on the other side of today — one clamp serves both fields.
+  const range = futureRange(new Date(2024, 1, 20)); // 20 February 2024
 
-  assert.equal(years[0], 2024, "newest first");
-  assert.equal(years[years.length - 1], MIN_PURCHASE_YEAR);
-  assert.equal(years.includes(2025), false, "an appliance cannot be bought next year");
-  assert.deepEqual([...years].sort((a, b) => b - a), years, "strictly descending");
+  assert.deepEqual(selectableDayRange(2024, 2, range), [20, 29], "this month starts at today");
+  assert.deepEqual(selectableDayRange(2024, 3, range), [1, 31], "next month is whole");
+  assert.equal(selectableDayRange(2024, 1, range), null, "last month is gone");
+  assert.deepEqual(
+    selectableDayRange(2025, 2, range),
+    [1, 20],
+    "and the far end stops exactly a year out"
+  );
+  assert.equal(selectableDayRange(2025, 3, range), null, "past the horizon is out of range");
+
+  assert.equal(monthPosition(2024, 1, range), "before");
+  assert.equal(monthPosition(2024, 2, range), "inside");
+  assert.equal(monthPosition(2025, 2, range), "inside");
+  assert.equal(monthPosition(2025, 3, range), "after");
+});
+
+test("the year list spans the range, and keeps a stored oddity visible", () => {
+  const today = new Date(2024, 1, 20);
+  const past = yearsInRange(pastRange(today));
+
+  assert.equal(past[0], 2024, "newest first");
+  assert.equal(past[past.length - 1], MIN_PURCHASE_YEAR);
+  assert.equal(past.includes(2025), false, "an appliance cannot be bought next year");
+  assert.deepEqual([...past].sort((a, b) => b - a), past, "strictly descending");
 
   // A stored value outside the range still has to be visible, or editing that row
   // would silently rewrite its date.
-  assert.equal(purchaseYears(today, 2030)[0], 2030);
+  assert.equal(yearsInRange(pastRange(today), 2030)[0], 2030);
+
+  const future = yearsInRange(futureRange(today));
+  assert.deepEqual(future, [2025, 2024], "the service horizon crosses one year boundary");
+});
+
+test("a warranty expiry may be either side of today", () => {
+  // The one date field that is not bounded by today: a warranty may already have run
+  // out, which is exactly why the customer is being asked for it.
+  const range = anyRange(new Date(2024, 1, 20));
+
+  assert.equal(MAX_WARRANTY_YEARS, 10);
+  assert.deepEqual(selectableDayRange(2024, 2, range), [1, 29], "today is not a boundary here");
+  assert.deepEqual(selectableDayRange(2023, 2, range), [1, 28], "an expired warranty is fine");
+  assert.deepEqual(selectableDayRange(2034, 2, range), [1, 20], "the ceiling is ten years, exactly");
+  assert.equal(selectableDayRange(2034, 3, range), null, "and ten years out is not");
+});
+
+test("today is always a legal date for both fields", () => {
+  // The boundary the two ranges meet at: today is the last purchase date and the first
+  // service date, so neither field may exclude it.
+  const today = startOfToday();
+  const year = today.getFullYear();
+  const month = today.getMonth() + 1;
+  const day = today.getDate();
+
+  const past = selectableDayRange(year, month, pastRange(today));
+  assert.ok(past[0] <= day && past[1] >= day, "today is selectable as a purchase date");
+  const future = selectableDayRange(year, month, futureRange(today));
+  assert.ok(future[0] <= day && future[1] >= day, "today is selectable as a service date");
 });
 
 // -------------------------------------------------- 3. the caps are wired in
@@ -210,7 +269,7 @@ test("both screens clean the identifiers on the way into the payload", () => {
   assert.match(page, /serial_number: cleanCode\(form\.serial_number, MAX_SERIAL_NUMBER_LENGTH\) \|\| null/);
 });
 
-test("the purchase date is picked, not typed", () => {
+test("every date field is picked, not typed", () => {
   for (const [name, source] of [
     [WIZARD, wizard],
     [PAGE, page],
@@ -220,10 +279,20 @@ test("the purchase date is picked, not typed", () => {
       /<DateSelect[\s\S]{0,140}id="appliance-purchase-date"/,
       `${name} must use the shared picker for the purchase date`
     );
+    assert.match(
+      source,
+      /<DateSelect[\s\S]{0,140}id="warranty-expiry"/,
+      `${name} must use it for the warranty expiry too`
+    );
     assert.equal(
       [...source.matchAll(/id="appliance-purchase-date"/g)].length,
       1,
       `${name} must not also keep a native input with the same id`
+    );
+    assert.doesNotMatch(
+      source,
+      /type="date"/,
+      `${name} still has a native date input: on Firefox that is spinner segments with no calendar at all`
     );
     assert.doesNotMatch(
       source,
@@ -232,9 +301,16 @@ test("the purchase date is picked, not typed", () => {
     );
   }
 
-  // The wizard's OTHER date input is the preferred service date, and it stays
-  // native on purpose: that one is in the future, which DateSelect cannot express.
-  assert.match(wizard, /id="preferred-date"[\s\S]{0,200}type="date"/);
+  // The wizard's other date fields: the requested service date (today .. a year ahead)
+  // and the warranty expiry (either side of today).
+  assert.match(
+    wizard,
+    /<DateSelect[\s\S]{0,160}id="preferred-date"/,
+    "the service date must use the shared picker too"
+  );
+  assert.match(wizard, /direction="future"/);
+  assert.match(wizard, /direction="any"/);
+  assert.match(wizard, /direction="past"/);
 
   // Three selects, in the order a date is spoken: month, day, year.
   assert.match(dateSelect, /id=\{`\$\{id\}-month`\}/);
@@ -248,7 +324,12 @@ test("the purchase date is picked, not typed", () => {
   );
   assert.match(
     dateSelect,
-    /disabled=\{dayLimit === 0\}/,
+    /direction === "future"\) return futureRange\(today\)/,
+    "all three directions take their bounds from the lib, so they cannot drift apart"
+  );
+  assert.match(
+    dateSelect,
+    /disabled=\{chosen && !bounds\}/,
     "a month that has not happened disables the day list"
   );
 });

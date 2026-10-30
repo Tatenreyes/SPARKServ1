@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import {
-  isFutureMonth,
-  lastSelectableDay,
+  anyRange,
+  futureRange,
+  monthPosition,
   parseIsoDate,
-  purchaseYears,
+  pastRange,
+  selectableDayRange,
+  startOfToday,
   toIsoDate,
+  yearsInRange,
 } from "@/lib/appliance-fields";
 
 const MONTHS = [
@@ -38,12 +42,14 @@ const MONTHS = [
  * three controls, and a single-field class such as the wizard's `FIELD` carries
  * `w-full`, which would make each select claim a whole row of its own.
  *
- * PAST DATES ONLY (`maxDate` defaults to today). It is not a general date picker:
- * the wizard's preferred service date is in the FUTURE and keeps its native input,
- * which is the one thing that control does well.
+ * One control serves both date fields, and `direction` decides which side of today
+ * it is for — the purchase date (1970 .. today) and the requested service date
+ * (today .. a year ahead). The bounds live in the lib, so the two cannot drift apart:
+ * the same clamping that stops a purchase date in the future stops a service date in
+ * the past.
  */
 const SELECT =
-  "min-h-[44px] cursor-pointer rounded-xl border border-line bg-surface px-3 py-2 text-base text-ink transition duration-200 hover:border-brand-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:text-sm";
+  "min-h-[44px] cursor-pointer rounded-xl border border-line bg-surface px-3 py-2 text-base text-ink transition duration-200 hover:border-brand-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:text-sm disabled:cursor-not-allowed disabled:opacity-60";
 
 export interface DateSelectProps {
   /** Prefix for the three control ids, e.g. `appliance-purchase-date`. */
@@ -54,8 +60,12 @@ export interface DateSelectProps {
   value: string;
   /** Called with the ISO date once all three parts exist, and with "" on clear. */
   onChange: (value: string) => void;
-  /** The latest selectable day. Defaults to today. */
-  maxDate?: Date;
+  /**
+   * Which side of today this field is for. `past` (the default) is an appliance's
+   * purchase date, `future` is a requested service date, and `any` is a warranty
+   * expiry — the one date that may legitimately be either.
+   */
+  direction?: "past" | "future" | "any";
 }
 
 export default function DateSelect({
@@ -63,9 +73,8 @@ export default function DateSelect({
   label,
   value,
   onChange,
-  maxDate,
+  direction = "past",
 }: DateSelectProps) {
-  const latest = maxDate ?? new Date();
   const parsed = parseIsoDate(value);
 
   const [month, setMonth] = useState(parsed ? parsed.getMonth() + 1 : 0);
@@ -86,8 +95,33 @@ export default function DateSelect({
     setYear(next ? next.getFullYear() : 0);
   }, [value]);
 
-  const years = purchaseYears(latest, year || null);
-  const dayLimit = month && year ? lastSelectableDay(year, month, latest) : 31;
+  // Read once per mount: a range that shifted under the customer mid-form would be worse
+  // than one that is a few hours stale.
+  const today = useMemo(() => startOfToday(), []);
+  const range = useMemo(() => {
+    if (direction === "future") return futureRange(today);
+    if (direction === "any") return anyRange(today);
+    return pastRange(today);
+  }, [direction, today]);
+
+  const years = yearsInRange(range, year || null);
+  const chosen = Boolean(month && year);
+  const position = chosen ? monthPosition(year, month, range) : "inside";
+  const bounds = chosen ? selectableDayRange(year, month, range) : null;
+
+  /**
+   * The day list. Before a month and a year exist it is a whole month — a partial choice
+   * cannot be committed anyway, and an empty Day list would look broken. Once both are
+   * known the list is exactly the selectable span, or the stored day alone when the month
+   * itself is out of range, so a value from an older row still renders.
+   */
+  const dayNumbers = !chosen
+    ? Array.from({ length: 31 }, (_, index) => index + 1)
+    : bounds
+      ? Array.from({ length: bounds[1] - bounds[0] + 1 }, (_, index) => bounds[0] + index)
+      : day
+        ? [day]
+        : [];
 
   function commit(nextMonth: number, nextDay: number, nextYear: number) {
     setMonth(nextMonth);
@@ -100,17 +134,23 @@ export default function DateSelect({
   }
 
   /**
-   * Clamp the day rather than clear it: 31 January followed by "February" should
-   * read 28 (or 29), not silently empty the field.
+   * Clamp the day rather than clear it: 31 January followed by "February" should read 28
+   * (or 29), not silently empty the field — and in the other direction, a service date
+   * cannot keep a day that has already passed this month.
    */
+  function clampDay(nextDay: number, nextMonth: number, nextYear: number): number {
+    if (!nextDay || !nextMonth || !nextYear) return nextDay;
+    const next = selectableDayRange(nextYear, nextMonth, range);
+    if (!next) return 0;
+    return Math.min(Math.max(nextDay, next[0]), next[1]);
+  }
+
   function chooseMonth(nextMonth: number) {
-    const limit = nextMonth && year ? lastSelectableDay(year, nextMonth, latest) : 31;
-    commit(nextMonth, day && day > limit ? limit : day, year);
+    commit(nextMonth, clampDay(day, nextMonth, year), year);
   }
 
   function chooseYear(nextYear: number) {
-    const limit = month && nextYear ? lastSelectableDay(nextYear, month, latest) : 31;
-    commit(month, day && day > limit ? limit : day, nextYear);
+    commit(month, clampDay(day, month, nextYear), nextYear);
   }
 
   function clear() {
@@ -136,7 +176,7 @@ export default function DateSelect({
             <option
               key={name}
               value={index + 1}
-              disabled={year ? isFutureMonth(year, index + 1, latest) : false}
+              disabled={year ? monthPosition(year, index + 1, range) !== "inside" : false}
             >
               {name}
             </option>
@@ -148,11 +188,11 @@ export default function DateSelect({
           aria-label={`${label} day`}
           value={day || ""}
           onChange={(e) => commit(month, Number(e.target.value), year)}
-          disabled={dayLimit === 0}
-          className={`${SELECT} basis-[5.5rem] disabled:cursor-not-allowed disabled:opacity-60`}
+          disabled={chosen && !bounds}
+          className={`${SELECT} basis-[5.5rem]`}
         >
           <option value="">Day</option>
-          {Array.from({ length: dayLimit }, (_, index) => index + 1).map((option) => (
+          {dayNumbers.map((option) => (
             <option key={option} value={option}>
               {option}
             </option>
@@ -187,9 +227,13 @@ export default function DateSelect({
       </div>
 
       {/* Said out loud rather than shown as an empty Day list, which reads as broken. */}
-      {dayLimit === 0 && (
+      {chosen && !bounds && (
         <p className="mt-1 text-[11px] text-muted">
-          That month hasn&apos;t happened yet — pick an earlier one.
+          {position === "before"
+            ? "That date is earlier than this field allows — pick a later month."
+            : direction === "future"
+              ? "That is more than a year ahead — pick a nearer month."
+              : "That month hasn't happened yet — pick an earlier one."}
         </p>
       )}
     </fieldset>

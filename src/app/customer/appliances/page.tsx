@@ -258,6 +258,7 @@ export default function AppliancesPage() {
                   label="Purchase Date"
                   value={form.purchase_date}
                   onChange={(purchase_date) => setForm({ ...form, purchase_date })}
+                  direction="past"
                 />
               </div>
               <div>
@@ -289,12 +290,12 @@ export default function AppliancesPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-ink/80">Warranty Expiry Date</label>
-                    <input
-                      type="date"
+                    <DateSelect
+                      id="warranty-expiry"
+                      label="Warranty Expiry Date"
                       value={form.warranty_expiry_date}
-                      onChange={(e) => setForm({ ...form, warranty_expiry_date: e.target.value })}
-                      className="w-full rounded-xl border border-ink/10 bg-surface px-3.5 py-2.5 text-sm"
+                      onChange={(warranty_expiry_date) => setForm({ ...form, warranty_expiry_date })}
+                      direction="any"
                     />
                   </div>
                 </>
@@ -371,7 +372,7 @@ export default function AppliancesPage() {
                 {appliance.serial_number && <p><span className="font-medium">Serial:</span> {appliance.serial_number}</p>}
                 {appliance.purchase_date && <p><span className="font-medium">Purchased:</span> {formatIsoDate(appliance.purchase_date)}</p>}
                 {appliance.warranty_type && <p><span className="font-medium">Warranty:</span> {appliance.warranty_type}</p>}
-                {appliance.warranty_expiry_date && <p><span className="font-medium">Expires:</span> {new Date(appliance.warranty_expiry_date).toLocaleDateString()}</p>}
+                {appliance.warranty_expiry_date && <p><span className="font-medium">Expires:</span> {formatIsoDate(appliance.warranty_expiry_date)}</p>}
               </div>
               <div className="flex gap-2">
                 <button
