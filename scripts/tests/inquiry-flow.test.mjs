@@ -189,3 +189,60 @@ test("the panel carries no resolved note, because that state never renders it", 
   assert.match(panel, /outcome === "unresolved" &&/);
   assert.match(panel, /outcome === "skipped" &&/);
 });
+
+// -------------------------------------------------- 6. one picker, one voice
+
+test("the fault is chosen in exactly one place", () => {
+  assert.doesNotMatch(
+    wizard,
+    /id="problem-category"/,
+    "the issue <select> is gone: the chips replaced it"
+  );
+  assert.match(
+    wizard,
+    /\{applianceIssues\.map\(\(issue\) => \{/,
+    "the chips render the whole catalogue, 'Other' included"
+  );
+  assert.match(wizard, /aria-pressed=\{selected\}/);
+  assert.match(
+    wizard,
+    /onClick=\{\(\) => handleIssueSelect\(selected \? "" : issue\.id\)\}/,
+    "tapping the chosen chip clears it, so 'not sure' needs no control of its own"
+  );
+  assert.doesNotMatch(
+    panel,
+    /choosableIssues/,
+    "the panel must not render the catalogue a second time"
+  );
+  assert.doesNotMatch(
+    panel,
+    /issues\.filter/,
+    "nor a subset of it — that subset offered 6 issues, omitted 'Other', and hid 'Not defrosting'"
+  );
+});
+
+test("the panel speaks with one voice", () => {
+  assert.equal(
+    [...panel.matchAll(/function AssistantBubble\(/g)].length,
+    1,
+    "one definition of the identity row and bubble"
+  );
+  assert.equal(
+    [...panel.matchAll(/<AssistantBubble /g)].length,
+    4,
+    "all four states (identified, matched, ambiguous, unmatched) use it"
+  );
+  assert.equal(
+    [...panel.matchAll(/rounded-2xl rounded-tl-sm border border-line bg-surface/g)].length,
+    1,
+    "and the bubble shell is styled in that one place, so the question cannot drift into a second card"
+  );
+});
+
+test("nothing speaks before the customer has said anything", () => {
+  assert.match(
+    panel,
+    /if \(awaitingDescription\) return null;/,
+    "an empty card under an untouched textarea is noise"
+  );
+});

@@ -10,11 +10,16 @@
  *
  * All matching and selection logic lives in `src/lib/issue-matching.ts`; this
  * component only presents the result and reports the customer's choices upward.
+ *
+ * Two rules keep it from becoming a second form:
+ *   * it owns **no issue list** — the chips in the wizard are the one place a fault is
+ *     chosen, so the catalogue is never rendered twice, and
+ *   * every state speaks through `AssistantBubble`, so the panel has one voice.
  */
 
-import { useEffect, useState } from "react";
-import { AlertTriangle, Check, HelpCircle, Lightbulb, ShieldCheck } from "lucide-react";
-import { getIssueLabel, type ApplianceIssue } from "@/lib/appliance-issues";
+import { useEffect, useState, type ReactNode } from "react";
+import { AlertTriangle, Check, Lightbulb, ShieldCheck } from "lucide-react";
+import { getIssueLabel } from "@/lib/appliance-issues";
 import type { IssueMatchResult, TroubleshootingOutcome } from "@/lib/issue-matching";
 import {
   NO_GUIDE_MESSAGE,
@@ -24,8 +29,6 @@ import {
 
 export interface TroubleshootingPanelProps {
   applianceType: string;
-  /** The appliance's own issue list, for the "choose an issue" shortcuts. */
-  issues: ApplianceIssue[];
   /** What the matcher found for the current description. */
   match: IssueMatchResult;
   /** The identified issue: explicitly selected or a confirmed suggestion. */
@@ -50,7 +53,6 @@ export interface TroubleshootingPanelProps {
 
 export default function TroubleshootingPanel({
   applianceType,
-  issues,
   match,
   identifiedIssueId,
   guide,
@@ -64,7 +66,6 @@ export default function TroubleshootingPanel({
   awaitingDescription,
 }: TroubleshootingPanelProps) {
   const identifiedLabel = getIssueLabel(applianceType, identifiedIssueId);
-  const choosableIssues = issues.filter((issue) => issue.id !== "other").slice(0, 6);
 
   /**
    * Which checks the customer has ticked off.
@@ -92,31 +93,7 @@ export default function TroubleshootingPanel({
     const doneCount = guide ? doneSteps.filter((title) => guide.some((step) => step.title === title)).length : 0;
 
     return (
-      <div className="mt-5">
-        {/* The assistant's identity: this is a conversation, not another form section. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
-            <Lightbulb className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
-          <p className="text-xs font-semibold text-ink">SPARKServ assistant</p>
-          <button
-            type="button"
-            onClick={onSkip}
-            className="ml-auto inline-flex min-h-[36px] cursor-pointer items-center rounded-lg border border-line bg-soft px-3 text-xs font-semibold text-ink/70 transition duration-200 hover:bg-brand-soft"
-          >
-            Skip troubleshooting
-          </button>
-        </div>
-
-        {/*
-          The bubble. Every check is visible at once, on purpose: revealing one step per
-          turn hides the help behind taps and is slower to scan than a list — the chat is
-          the framing, not the delivery mechanism.
-        */}
-        <div
-          aria-label={`Troubleshooting for ${identifiedLabel}`}
-          className="mt-2 rounded-2xl rounded-tl-sm border border-line bg-surface p-4 sm:p-5"
-        >
+      <AssistantBubble label={`Troubleshooting for ${identifiedLabel}`} onSkip={onSkip}>
           <p className="text-sm leading-relaxed text-ink">
             That sounds like{" "}
             <span className="font-semibold">{identifiedLabel}</span>. Most faults like this
@@ -178,10 +155,10 @@ export default function TroubleshootingPanel({
             />
             {TROUBLESHOOTING_DISCLAIMER}
           </p>
-        </div>
-        {/* ---- The one question. Two answers: "Skip" stays the header control, and
-            offering the same decision twice made it look like two different ones. ---- */}
-        <div className="mt-3 rounded-2xl rounded-tl-sm border border-line bg-surface p-4 sm:p-5">
+        {/* ---- The one question, inside the same bubble: the assistant asks once, and
+            "Skip" stays the header control. Offering the same decision twice made it look
+            like two different ones. ---- */}
+        <div className="mt-4 border-t border-line pt-4">
           <p className="text-xs font-semibold text-ink">
             Did that fix it?{" "}
             <span className="font-normal text-muted">(optional, but it helps your technician)</span>
@@ -215,7 +192,7 @@ export default function TroubleshootingPanel({
             </p>
           )}
         </div>
-      </div>
+      </AssistantBubble>
     );
   }
 
@@ -224,17 +201,9 @@ export default function TroubleshootingPanel({
     const label = getIssueLabel(applianceType, match.issueId);
     if (label) {
       return (
-        <section
-          aria-label="Confirm the detected problem"
-          className="mt-5 rounded-2xl border border-brand-200 bg-brand-soft/60 p-4 sm:p-5"
-        >
-          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-ink">
-            <HelpCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            Possible match
-          </p>
-          <p className="mt-2 text-sm text-ink">
-            The problem may be: <span className="font-semibold">{label}</span>. Is this
-            correct?
+        <AssistantBubble label="Confirm the detected problem">
+          <p className="text-sm leading-relaxed text-ink">
+            That sounds like <span className="font-semibold">{label}</span>. Is that right?
           </p>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             We recognised “{match.matchedPhrase}” in your description. Nothing is assumed
@@ -246,17 +215,17 @@ export default function TroubleshootingPanel({
               onClick={() => onConfirmSuggestion(match.issueId)}
               className="inline-flex min-h-[40px] cursor-pointer items-center rounded-xl bg-brand-500 px-4 text-xs font-semibold text-white transition duration-200 hover:bg-brand-600"
             >
-              Yes, this is correct
+              Yes, that&apos;s it
             </button>
             <button
               type="button"
               onClick={onRejectSuggestion}
               className="inline-flex min-h-[40px] cursor-pointer items-center rounded-xl border border-line bg-surface px-4 text-xs font-semibold text-ink/75 transition duration-200 hover:bg-soft"
             >
-              No, choose an issue
+              No, let me pick
             </button>
           </div>
-        </section>
+        </AssistantBubble>
       );
     }
   }
@@ -264,11 +233,8 @@ export default function TroubleshootingPanel({
   // ---- 3. Several equally specific issues: the customer chooses -------------
   if (!awaitingDescription && !suggestionDismissed && match.kind === "ambiguous") {
     return (
-      <section
-        aria-label="Choose the problem"
-        className="mt-5 rounded-2xl border border-line bg-surface p-4 sm:p-5"
-      >
-        <p className="text-sm font-medium text-ink">
+      <AssistantBubble label="Choose the problem">
+        <p className="text-sm leading-relaxed text-ink">
           Your description could match more than one problem. Which is closest?
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -281,34 +247,73 @@ export default function TroubleshootingPanel({
           ))}
         </div>
         <ContinueWithout onClick={onSkip} />
-      </section>
+      </AssistantBubble>
     );
   }
 
-  // ---- 4. Nothing identified (yet): offer the list, never a guess ----------
+  // ---- 4. Nothing identified: say so once, and point at the chips above -----
+  //
+  // Nothing at all until the customer has said something. An empty card under an
+  // untouched textarea is noise, and the issue chips are already on screen above.
+  if (awaitingDescription) return null;
+
   return (
-    <section
-      aria-label="Troubleshooting unavailable"
-      className="mt-5 rounded-2xl border border-line bg-soft/50 p-4 sm:p-5"
-    >
-      {!awaitingDescription && (
-        <p className="text-xs leading-relaxed text-muted">
-          {suggestionDismissed
-            ? "Pick the closest issue from the list above, or continue without troubleshooting."
-            : "We couldn't identify the exact problem from your description. Please select the closest issue from the list, or continue without troubleshooting — your request can still be submitted and a technician will diagnose it on site."}
-        </p>
-      )}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {choosableIssues.map((issue) => (
-          <IssueChip
-            key={issue.id}
-            label={issue.label}
-            onClick={() => onChooseIssue(issue.id)}
-          />
-        ))}
-      </div>
+    <AssistantBubble label="Troubleshooting unavailable">
+      <p className="text-xs leading-relaxed text-muted">
+        {suggestionDismissed
+          ? "No problem — pick the closest issue from the list above and its checks will appear here."
+          : "We couldn't identify the exact problem from your description. Pick the closest issue from the list above and its checks will appear here — or continue without troubleshooting: your request can still be submitted, and a technician will diagnose it on site."}
+      </p>
       <ContinueWithout onClick={onSkip} />
-    </section>
+    </AssistantBubble>
+  );
+}
+
+/**
+ * The assistant's identity row and its bubble.
+ *
+ * ONE definition for every state, so the panel speaks with a single voice: whichever
+ * branch renders, the customer sees the same avatar, the same name, and the reply in the
+ * same shell. A bubble carries all of its content at once — never one turn at a time
+ * (see branch 1, where every check is visible on arrival).
+ */
+function AssistantBubble({
+  label,
+  onSkip,
+  children,
+}: {
+  /** What this bubble is, for assistive technology. */
+  label: string;
+  /** Only where the bubble is long enough that leaving it needs its own control. */
+  onSkip?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-5">
+      {/* The assistant's identity: this is a conversation, not another form section. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
+          <Lightbulb className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
+        <p className="text-xs font-semibold text-ink">SPARKServ assistant</p>
+        {onSkip && (
+          <button
+            type="button"
+            onClick={onSkip}
+            className="ml-auto inline-flex min-h-[36px] cursor-pointer items-center rounded-lg border border-line bg-soft px-3 text-xs font-semibold text-ink/70 transition duration-200 hover:bg-brand-soft"
+          >
+            Skip troubleshooting
+          </button>
+        )}
+      </div>
+
+      <div
+        aria-label={label}
+        className="mt-2 rounded-2xl rounded-tl-sm border border-line bg-surface p-4 sm:p-5"
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 

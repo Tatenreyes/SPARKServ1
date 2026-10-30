@@ -1012,26 +1012,46 @@ export default function RequestRepairWizard() {
         onToggle={() => toggleSection("problem")}
       >
         <div>
-          <label htmlFor="problem-category" className="mb-1.5 block text-sm font-medium text-ink/80">
-            What problem are you experiencing?
-          </label>
-          <select
-            id="problem-category"
-            value={identifiedIssueId}
-            onChange={(e) => handleIssueSelect(e.target.value)}
-            className={FIELD}
+          <p
+            id="problem-category-label"
+            className="mb-1.5 block text-sm font-medium text-ink/80"
           >
-            <option value="">Not sure yet — leave this and describe it below</option>
-            {applianceIssues.map((issue) => (
-              <option key={issue.id} value={issue.id}>
-                {issue.label}
-              </option>
-            ))}
-          </select>
+            What problem are you experiencing?
+          </p>
+          {/* The one picker. This catalogue used to appear twice — as a <select> here and
+              again as six chips inside the troubleshooting panel — with a different set of
+              members in each ("Other" only here, "Not defrosting" only there). Chips rather
+              than a select: five to ten issues fit two rows on a phone, and a tapped chip
+              is a visible answer, where a collapsed native picker hides the catalogue
+              behind a tap that shows nothing. (The appliance list in step 1 keeps its
+              <select> — that one runs past twenty entries.) */}
+          <div
+            role="group"
+            aria-labelledby="problem-category-label"
+            className="flex flex-wrap gap-2"
+          >
+            {applianceIssues.map((issue) => {
+              const selected = identifiedIssueId === issue.id;
+              return (
+                <button
+                  key={issue.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => handleIssueSelect(selected ? "" : issue.id)}
+                  className={`inline-flex min-h-[40px] cursor-pointer items-center rounded-full border px-3.5 text-xs font-medium transition duration-200 ${
+                    selected
+                      ? "border-brand-300 bg-brand-soft text-brand-ink"
+                      : "border-line bg-surface text-ink/80 hover:border-brand-300 hover:bg-brand-soft"
+                  }`}
+                >
+                  {issue.label}
+                </button>
+              );
+            })}
+          </div>
           <p className="mt-1.5 text-xs leading-relaxed text-muted">
-            {applianceType
-              ? `These are the ${applianceType.toLowerCase()} issues SPARKServ supports. Picking one shows its preliminary checks.`
-              : "This list follows the appliance type you choose in step 1."}
+            Tapping one shows its preliminary checks. Not sure? Leave this empty and
+            describe it below.
           </p>
         </div>
 
@@ -1051,10 +1071,10 @@ export default function RequestRepairWizard() {
         </div>
 
         {/* Inline troubleshooting: only ever for an issue that has actually been
-            identified, never merely because an appliance was selected. */}
+            identified, never merely because an appliance was selected. The panel gets no
+            issue list of its own — the chips above are the one place a fault is chosen. */}
         <TroubleshootingPanel
           applianceType={applianceType}
-          issues={applianceIssues}
           match={issueMatch}
           identifiedIssueId={identifiedIssue?.id ?? null}
           guide={troubleshootingGuide}
