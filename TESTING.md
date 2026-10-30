@@ -733,7 +733,9 @@ troubleshooting" all leave the form submittable, and no guide is ever shown for 
 appliance alone: with nothing typed and no chip tapped, the assistant says nothing at
 all. Answering "Yes, it's working" replaces the whole form with the resolved screen —
 "Nothing to book — the checks did the trick", offering "It came back — request a visit"
-for an intermittent fault; "No, still broken" continues to photos. Submitting with an
+for an intermittent fault; "No, still broken" continues to photos. That card is the pale
+signal surface, so its title and body must read **dark navy** on it — if the heading
+looks washed out, the card has lost its `spark-signal-card` class. Submitting with an
 unidentified issue must succeed — check the row has `issue_id = null` and the
 description as typed.
 

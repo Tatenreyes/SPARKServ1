@@ -97,6 +97,27 @@ test("a resolved fault ends the flow instead of creating a request", () => {
   );
 });
 
+test("the success card opts into the palette's dark copy", () => {
+  // The card fills with the pale signal surface while sitting inside the reference
+  // palette, whose `text-ink` is near-white: without `spark-signal-card` the title is
+  // white on mint and vanishes. The submitted card carries the same class.
+  assert.match(
+    resolvedScreen,
+    /spark-signal-card/,
+    "the resolved card must opt in, exactly like the submitted card"
+  );
+  assert.equal(
+    [...wizard.matchAll(/className="spark-signal-card /g)].length,
+    2,
+    "both success cards, and only those two"
+  );
+  assert.doesNotMatch(
+    resolvedScreen,
+    /rounded-full bg-signal-soft/,
+    "the icon disc must contrast with the card it sits on, not repeat its fill"
+  );
+});
+
 test("the resolved copy never claims the appliance was repaired", () => {
   assert.doesNotMatch(
     resolvedScreen,

@@ -641,8 +641,8 @@ export default function RequestRepairWizard() {
   if (submitted && serviceRequestId) {
     return (
       <div className="max-w-2xl">
-        <div className="rounded-2xl border border-line bg-signal-soft p-8 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-signal-soft text-signal-ink">
+        <div className="spark-signal-card rounded-2xl border border-line bg-signal-soft p-8 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-signal-500 text-white">
             <CheckCircle2 className="h-7 w-7" />
           </div>
           <h2 className="mt-4 font-display text-xl font-semibold text-ink">Repair Request Submitted</h2>
@@ -690,8 +690,13 @@ export default function RequestRepairWizard() {
   if (!needsVisit) {
     return (
       <div className="max-w-2xl">
-        <div className="rounded-2xl border border-line bg-signal-soft p-8 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-signal-soft text-signal-ink">
+        {/* `spark-signal-card` is not decoration: it is the opt-in that keeps this card's
+            copy dark on the pale signal surface inside the reference palette (see
+            globals.css). Without it the title inherits the palette's near-white `text-ink`
+            and disappears into the mint — the submitted card below carries it for exactly
+            the same reason. */}
+        <div className="spark-signal-card rounded-2xl border border-line bg-signal-soft p-8 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-signal-500 text-white">
             <CheckCircle2 className="h-7 w-7" />
           </div>
           <h2 className="mt-4 font-display text-xl font-semibold text-ink">

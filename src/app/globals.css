@@ -604,3 +604,21 @@ img {
   background-image: linear-gradient(103deg, #101923 0%, #171a36 54%, #1b1d43 100%);
 }
 
+/* A success card keeps its pale signal surface in the reference palette, because the
+   tonal tokens (`-soft` / `-ink`) are deliberately NOT remapped above: they are the
+   light-mode pairs, and remapping them would also flatten every small chip that reads
+   correctly today (dark green on mint). The consequence is a trap — a card that puts a
+   *palette* token (`text-ink`, `text-muted`) on a tonal surface inherits the palette's
+   near-white text and disappears into its own background.
+
+   `spark-signal-card` is the opt-in that repairs that for the card's copy. Any new card
+   filled with `bg-signal-soft` (or another `-soft`) that writes `text-ink` / `text-muted`
+   inside the reference palette MUST carry it. */
+.reference-palette .spark-signal-card .text-ink {
+  color: #10264a;
+}
+
+.reference-palette .spark-signal-card .text-muted {
+  color: #4b647a;
+}
+
