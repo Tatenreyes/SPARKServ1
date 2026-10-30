@@ -94,67 +94,67 @@ export default function TroubleshootingPanel({
 
     return (
       <AssistantBubble label={`Troubleshooting for ${identifiedLabel}`} onSkip={onSkip}>
-          <p className="text-sm leading-relaxed text-ink">
-            That sounds like{" "}
-            <span className="font-semibold">{identifiedLabel}</span>. Most faults like this
-            are one of the checks below — worth a minute before you book a visit.
+        <p className="text-sm leading-relaxed text-ink">
+          That sounds like{" "}
+          <span className="font-semibold">{identifiedLabel}</span>. Most faults like this
+          are one of the checks below — worth a minute before you book a visit.
+        </p>
+
+        {stepCount > 0 && (
+          <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+            {doneCount} of {stepCount} done
           </p>
+        )}
 
-          {stepCount > 0 && (
-            <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-              {doneCount} of {stepCount} done
-            </p>
-          )}
-
-          {guide?.length ? (
-            <ol className="mt-3 space-y-3">
-              {guide.map((step, index) => {
-                const done = doneSteps.includes(step.title);
-                return (
-                  <li key={step.title} className="flex gap-3">
-                    <span
-                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-                        done ? "bg-signal-500 text-white" : "bg-brand-soft text-brand-ink"
-                      }`}
-                    >
-                      {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-xs font-semibold ${done ? "text-muted line-through" : "text-ink"}`}>
-                        {step.title}
-                      </p>
-                      <p className="mt-0.5 text-xs leading-relaxed text-muted">{step.detail}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleStep(step.title)}
-                      aria-pressed={done}
-                      aria-label={`${done ? "Undo" : "Mark"} step ${index + 1}: ${step.title}`}
-                      className={`inline-flex h-8 shrink-0 cursor-pointer items-center rounded-lg border px-2.5 text-[11px] font-semibold transition duration-200 ${
-                        done
-                          ? "border-signal-500/30 bg-signal-soft/60 text-signal-ink"
-                          : "border-line bg-surface text-ink/70 hover:bg-soft"
-                      }`}
-                    >
-                      {done ? "Done" : "Mark done"}
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          ) : (
-            <p className="mt-4 rounded-xl border border-line bg-soft/60 px-3.5 py-3 text-xs leading-relaxed text-muted">
-              {NO_GUIDE_MESSAGE}
-            </p>
-          )}
-
-          <p className="mt-4 flex items-start gap-1.5 text-xs leading-relaxed text-muted">
-            <ShieldCheck
-              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal-ink"
-              aria-hidden="true"
-            />
-            {TROUBLESHOOTING_DISCLAIMER}
+        {guide?.length ? (
+          <ol className="mt-3 space-y-3">
+            {guide.map((step, index) => {
+              const done = doneSteps.includes(step.title);
+              return (
+                <li key={step.title} className="flex gap-3">
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                      done ? "bg-signal-500 text-white" : "bg-brand-soft text-brand-ink"
+                    }`}
+                  >
+                    {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-xs font-semibold ${done ? "text-muted line-through" : "text-ink"}`}>
+                      {step.title}
+                    </p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted">{step.detail}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleStep(step.title)}
+                    aria-pressed={done}
+                    aria-label={`${done ? "Undo" : "Mark"} step ${index + 1}: ${step.title}`}
+                    className={`inline-flex h-8 shrink-0 cursor-pointer items-center rounded-lg border px-2.5 text-[11px] font-semibold transition duration-200 ${
+                      done
+                        ? "border-signal-500/30 bg-signal-soft/60 text-signal-ink"
+                        : "border-line bg-surface text-ink/70 hover:bg-soft"
+                    }`}
+                  >
+                    {done ? "Done" : "Mark done"}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <p className="mt-4 rounded-xl border border-line bg-soft/60 px-3.5 py-3 text-xs leading-relaxed text-muted">
+            {NO_GUIDE_MESSAGE}
           </p>
+        )}
+
+        <p className="mt-4 flex items-start gap-1.5 text-xs leading-relaxed text-muted">
+          <ShieldCheck
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal-ink"
+            aria-hidden="true"
+          />
+          {TROUBLESHOOTING_DISCLAIMER}
+        </p>
         {/* ---- The one question, inside the same bubble: the assistant asks once, and
             "Skip" stays the header control. Offering the same decision twice made it look
             like two different ones. ---- */}
