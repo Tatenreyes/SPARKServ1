@@ -54,10 +54,12 @@ const WIZARD = "src/components/RequestRepairWizard.tsx";
 const PAGE = "src/app/customer/appliances/page.tsx";
 const DATE_SELECT = "src/components/DateSelect.tsx";
 const TIME_SELECT = "src/components/TimeSelect.tsx";
+const AVAILABILITY = "src/components/AvailabilityManager.tsx";
 const wizard = readFileSync(new URL(WIZARD, ROOT), "utf8");
 const page = readFileSync(new URL(PAGE, ROOT), "utf8");
 const dateSelect = readFileSync(new URL(DATE_SELECT, ROOT), "utf8");
 const timeSelect = readFileSync(new URL(TIME_SELECT, ROOT), "utf8");
+const availability = readFileSync(new URL(AVAILABILITY, ROOT), "utf8");
 
 // -------------------------------------------------- 1. the caps
 
@@ -356,6 +358,39 @@ test("a partial pick only offers times that exist", () => {
   assert.equal(optionsFor(valid, { hour12: 10, meridiem: "AM" })[0].minute, 0, "10 AM is whole");
   assert.equal(optionsFor(valid, { hour12: 10, meridiem: "AM" }).length, 12);
   assert.equal(optionsFor(valid, { hour12: 8, meridiem: "AM" }).length, 0, "8 AM is gone entirely");
+});
+
+test("a stored time from Postgres reads back too", () => {
+  // A `time` column returns "09:00:00". The same parser has to accept it, or the
+  // availability list would print blanks.
+  assert.equal(minutesOfDay("09:00:00"), 540);
+  assert.equal(formatClockTime("09:00:00"), "9:00 AM");
+  assert.equal(formatClockTime("17:30:00"), "5:30 PM");
+});
+
+test("working hours use a coarser grid than a visit window", () => {
+  const quarter = timeOptions("09:00", 15);
+  assert.deepEqual(quarter[0], { hour: 9, minute: 15 });
+  assert.equal(quarter.length, 59, "quarter-hour steps from 09:15 to 23:45");
+  assert.equal(timeOptions(undefined, 15).length, 96, "a whole day in quarter hours");
+});
+
+test("the availability grid picks its times from selects", () => {
+  assert.match(availability, /<TimeSelect[\s\S]{0,200}id="window-start"/);
+  assert.match(availability, /<TimeSelect[\s\S]{0,200}id="window-end"/);
+  assert.match(availability, /after=\{startTime\}/, "the end is constrained by the start");
+  assert.match(
+    availability,
+    /variant="single"/,
+    "the compact variant: two three-select pickers will not fit one scheduling row"
+  );
+  assert.match(availability, /step=\{15\}/, "quarter-hour steps for working hours");
+  assert.doesNotMatch(availability, /type="time"/, "no native time input is left");
+  assert.doesNotMatch(
+    availability,
+    /function prettyTime/,
+    "its own 12-hour formatter is gone — formatClockTime() is the one definition"
+  );
 });
 
 test("the window is picked from selects, not native time inputs", () => {

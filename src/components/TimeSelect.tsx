@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import {
+  TIME_STEP_MINUTES,
+  formatClockTime,
   hour12Of,
   hour24Of,
   meridiemOf,
@@ -49,6 +51,16 @@ export interface TimeSelectProps {
   /** Only times strictly after this are offered — a window end must follow its start. */
   after?: string;
   disabled?: boolean;
+  /** Minutes between choices. Five suits a visit window; fifteen suits working hours. */
+  step?: number;
+  /**
+   * `split` (the default) is three selects — hour, minute, AM/PM — for a window the
+   * customer states precisely. `single` is one select of ready-made times, for a dense
+   * row such as the availability grid, where three selects per boundary would not fit.
+   */
+  variant?: "split" | "single";
+  /** Field styling, so a compact caller can match the controls beside it. */
+  className?: string;
 }
 
 export default function TimeSelect({
@@ -58,6 +70,9 @@ export default function TimeSelect({
   onChange,
   after,
   disabled = false,
+  step = TIME_STEP_MINUTES,
+  variant = "split",
+  className = SELECT,
 }: TimeSelectProps) {
   const parsed = minutesOfDay(value);
 
@@ -87,7 +102,23 @@ export default function TimeSelect({
     setMeridiem(meridiemOf(hour));
   }, [value]);
 
-  const valid = useMemo(() => timeOptions(after), [after]);
+  const valid = useMemo(() => timeOptions(after, step), [after, step]);
+
+  /**
+   * The single-select list, plus the current value when it sits off the grid — a window
+   * stored at 09:07 (or a shift that predates the step) must still be visible, or the
+   * control would silently rewrite it.
+   */
+  const singleOptions = useMemo(() => {
+    const floor = minutesOfDay(after);
+    const current = minutesOfDay(value);
+    const times = valid.map((option) => toClockTime(option.hour, option.minute));
+    if (current === null || (floor !== null && current <= floor)) return times;
+    const asText = toClockTime(Math.floor(current / 60), current % 60);
+    if (times.includes(asText)) return times;
+    return [...times, asText].sort((a, b) => Number(minutesOfDay(a)) - Number(minutesOfDay(b)));
+  }, [valid, after, value]);
+
   const chosen = Boolean(hour12) && minute >= 0 && Boolean(meridiem);
 
   const hourChoices = uniqueNumbers(valid.map((option) => hour12Of(option.hour)));
@@ -97,6 +128,42 @@ export default function TimeSelect({
   const minuteChoices = uniqueNumbers(
     optionsFor(valid, { hour12, meridiem }).map((option) => option.minute)
   );
+
+  /**
+   * The compact variant: one select of ready-made times.
+   *
+   * It exists because the availability grid puts a start and an end in one row beside a
+   * weekday select and an Add button — six selects there would not fit, and three per
+   * boundary would wrap the row into a column.
+   */
+  if (variant === "single") {
+    return (
+      <div className="min-w-0">
+        <select
+          id={id}
+          aria-label={label}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          className={className}
+        >
+          <option value="">Select time</option>
+          {singleOptions.map((option) => (
+            <option key={option} value={option}>
+              {formatClockTime(option)}
+            </option>
+          ))}
+        </select>
+
+        {/* Said out loud rather than shown as an empty list, which reads as broken. */}
+        {!disabled && valid.length === 0 && (
+          <p className="mt-1 text-[11px] text-ink/55">
+            No time left in the day after that start — pick an earlier one.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   function commit(nextHour12: number, nextMinute: number, nextMeridiem: "AM" | "PM" | "") {
     // Clamp the minute into what the new hour allows, so a chosen 09:00 cannot survive a

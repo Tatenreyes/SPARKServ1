@@ -31,9 +31,14 @@ export interface ClockTime {
   minute: number;
 }
 
-/** Minutes since midnight, or null when the value is not a clock time. */
+/**
+ * Minutes since midnight, or null when the value is not a clock time.
+ *
+ * Accepts the optional seconds that Postgres appends to a `time` column ("09:00:00") —
+ * the same shape `zonedToUtc()` accepts, so a stored window and a picked one read alike.
+ */
 export function minutesOfDay(value: string | null | undefined): number | null {
-  const match = /^(\d{1,2}):(\d{2})$/.exec((value ?? "").trim());
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec((value ?? "").trim());
   if (!match) return null;
 
   const hour = Number(match[1]);
@@ -68,7 +73,6 @@ export function hour24Of(hour12: number, meridiem: "AM" | "PM"): number {
 export function formatClockTime(value: string | null | undefined): string {
   const minutes = minutesOfDay(value);
   if (minutes === null) return "";
-
   const hour = Math.floor(minutes / 60);
   const minute = minutes % 60;
   return `${hour12Of(hour)}:${String(minute).padStart(2, "0")} ${meridiemOf(hour)}`;

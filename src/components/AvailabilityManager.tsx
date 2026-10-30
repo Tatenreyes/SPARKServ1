@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CalendarClock, Clock, MapPin, Plus, Trash2 } from "lucide-react";
+import TimeSelect from "@/components/TimeSelect";
 import { zonedToUtc } from "@/lib/service-time";
+import { formatClockTime, isAfter } from "@/lib/time-of-day";
 import type {
   TechnicianAvailabilityRow,
   TechnicianServiceAreaRow,
@@ -34,15 +36,14 @@ import type {
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-/** Postgres returns `time` as "HH:MM:SS"; render it as "9:00 AM". */
-function prettyTime(value: string): string {
-  const [h, m] = value.split(":");
-  const hour = Number(h);
-  if (Number.isNaN(hour)) return value;
-  const suffix = hour >= 12 ? "PM" : "AM";
-  const h12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${h12}:${m} ${suffix}`;
-}
+/**
+ * The compact field style of this screen's rows.
+ *
+ * The window pickers match the weekday select beside them rather than the taller control
+ * used in the customer form: this is a dense scheduling row, and one control standing a
+ * head above its neighbours reads as a mistake.
+ */
+const FIELD_COMPACT = "rounded-lg border border-ink/15 px-3 py-1.5 text-sm text-ink";
 
 function prettyDateTime(iso: string, timeZone: string): string {
   const d = new Date(iso);
@@ -137,7 +138,7 @@ export default function AvailabilityManager({ serviceTimeZone }: { serviceTimeZo
       start_time: startTime,
       end_time: endTime,
     });
-    if (saved) setNotice(`Added ${WEEKDAYS[Number(weekday)]} ${prettyTime(startTime)}–${prettyTime(endTime)}.`);
+    if (saved) setNotice(`Added ${WEEKDAYS[Number(weekday)]} ${formatClockTime(startTime)}–${formatClockTime(endTime)}.`);
   }
 
   async function addTimeOff() {
@@ -234,7 +235,7 @@ export default function AvailabilityManager({ serviceTimeZone }: { serviceTimeZo
                 <span className="text-ink">
                   <span className="font-medium">{WEEKDAYS[w.weekday] ?? `Day ${w.weekday}`}</span>{" "}
                   <span className="text-ink/65">
-                    {prettyTime(w.start_time)} – {prettyTime(w.end_time)}
+                    {formatClockTime(w.start_time)} – {formatClockTime(w.end_time)}
                   </span>
                 </span>
                 <button
@@ -263,19 +264,30 @@ export default function AvailabilityManager({ serviceTimeZone }: { serviceTimeZo
               </option>
             ))}
           </select>
-          <input
-            type="time"
+          {/* Two pickers rather than native time inputs, and the end only offers times that
+              follow the start — `addWindow()` refuses a window that ends before it starts,
+              and the API answers 400 for anything that is not HH:MM. */}
+          <TimeSelect
+            id="window-start"
+            label="Window start"
             value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-            aria-label="Window start"
-            className="rounded-lg border border-ink/15 px-3 py-1.5 text-sm"
+            onChange={(value) => {
+              setStartTime(value);
+              if (endTime && !isAfter(value, endTime)) setEndTime("");
+            }}
+            step={15}
+            variant="single"
+            className={FIELD_COMPACT}
           />
-          <input
-            type="time"
+          <TimeSelect
+            id="window-end"
+            label="Window end"
             value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-            aria-label="Window end"
-            className="rounded-lg border border-ink/15 px-3 py-1.5 text-sm"
+            onChange={setEndTime}
+            after={startTime}
+            step={15}
+            variant="single"
+            className={FIELD_COMPACT}
           />
           <button
             onClick={addWindow}
